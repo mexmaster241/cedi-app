@@ -8,7 +8,7 @@ import { Transactions } from './components/Transactions';
 import { ActionBar } from './components/ActionBar';
 import { Header } from './components/Header';
 import { TopBar } from './components/TopBar';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
 
 
 // Keep the splash screen visible while we fetch resources
@@ -30,7 +30,7 @@ export default function Index() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+ 
       <View
         style={{
           flex: 1,
@@ -52,7 +52,7 @@ export default function Index() {
         </ScrollView>
         <ActionBar />
       </View>
-    </GestureHandlerRootView>
+
   );
 }
 

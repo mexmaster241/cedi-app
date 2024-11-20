@@ -3,21 +3,34 @@ import { colors } from '../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
+import { router } from 'expo-router';
 
 export function ActionBar() {
+  const handleHomePress = () => {
+    router.push('/');
+  };
+
+  const handleDepositPress = () => {
+    router.push('/deposit');
+  };
+
+  // const handleCardsPress = () => {
+  //   router.push('/cards');
+  // };
+
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.tabButton}>
+      <TouchableOpacity style={styles.tabButton} onPress={handleHomePress}>
         <AntDesign name="home" size={24} color={colors.black} />
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.centerButton}>
+      <TouchableOpacity style={styles.centerButton} onPress={handleDepositPress}>
         <View style={styles.plusButton}>
           <Ionicons name="add" size={32} color={colors.white} />
         </View>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.tabButton}>
+      <TouchableOpacity style={styles.tabButton} >
         <Feather name="credit-card" size={24} color={colors.black} />
       </TouchableOpacity>
     </View>
