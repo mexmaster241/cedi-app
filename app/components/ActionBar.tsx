@@ -3,25 +3,37 @@ import { colors } from '../constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
-import { router } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
 
 export function ActionBar() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const handleHomePress = () => {
-    router.push('/');
+    if (pathname !== '/') {
+      router.replace('/');
+    }
   };
 
   const handleDepositPress = () => {
     router.push('/deposit');
   };
 
-  // const handleCardsPress = () => {
-  //   router.push('/cards');
-  // };
+  const handleCardPress = () => {
+    router.push('/card');
+  };
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.tabButton} onPress={handleHomePress}>
-        <AntDesign name="home" size={24} color={colors.black} />
+      <TouchableOpacity 
+        style={styles.tabButton} 
+        onPress={handleHomePress}
+      >
+        <AntDesign 
+          name="home" 
+          size={24} 
+          color={pathname === '/' ? colors.black : colors.lightGray} 
+        />
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.centerButton} onPress={handleDepositPress}>
@@ -30,8 +42,12 @@ export function ActionBar() {
         </View>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.tabButton} >
-        <Feather name="credit-card" size={24} color={colors.black} />
+      <TouchableOpacity style={styles.tabButton} onPress={handleCardPress}>
+        <Feather 
+          name="credit-card" 
+          size={24} 
+          color={colors.lightGray} 
+        />
       </TouchableOpacity>
     </View>
   );

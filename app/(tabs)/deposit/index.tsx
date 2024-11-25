@@ -25,8 +25,10 @@ export default function DepositScreen() {
   };
 
   const handleContinue = () => {
-    // Handle deposit logic here
-    console.log('Deposit amount:', amount);
+    router.push({
+      pathname: '/deposit/select-recipient',
+      params: { amount }
+    });
   };
 
   const formatAmount = (value: string) => {
@@ -52,7 +54,6 @@ export default function DepositScreen() {
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.label}>Monto a depositar</Text>
           <View style={styles.amountContainer}>
             <Text style={styles.currencySymbol}>$</Text>
             <Text style={styles.amount}>{formatAmount(amount)}</Text>
@@ -103,6 +104,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+    paddingBottom: 8,
     backgroundColor: colors.white,
   },
   backButton: {
@@ -117,44 +119,38 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 24,
-  },
-  label: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 16,
-    color: colors.darkGray,
-    marginBottom: 8,
+    paddingTop: 80,
   },
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
+    marginBottom: 20,
   },
   currencySymbol: {
     fontFamily: 'ClashDisplay',
-    fontSize: 32,
+    fontSize: 56,
     color: colors.black,
     marginRight: 8,
   },
   amount: {
     fontFamily: 'ClashDisplay',
-    fontSize: 32,
+    fontSize: 56,
     color: colors.black,
   },
   keypad: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    marginBottom: 24,
+    flex: 0.8,
+    justifyContent: 'center',
   },
   keypadRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   keypadButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: colors.beige,
     justifyContent: 'center',
     alignItems: 'center',
@@ -169,6 +165,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    marginTop: 8,
   },
   continueButtonDisabled: {
     backgroundColor: colors.lightGray,
