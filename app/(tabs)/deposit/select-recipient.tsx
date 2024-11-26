@@ -26,6 +26,10 @@ export default function SelectRecipientScreen() {
     });
   };
 
+  const handleNewRecipient = () => {
+    router.push('/deposit/new');
+  };
+
   return (
     <>
       <StatusBar style="dark" translucent backgroundColor="transparent" />
@@ -41,7 +45,10 @@ export default function SelectRecipientScreen() {
         </View>
 
         <View style={styles.content}>
-          <TouchableOpacity style={styles.newRecipientButton}>
+          <TouchableOpacity 
+            style={styles.newRecipientButton}
+            onPress={handleNewRecipient}
+          >
             <View style={styles.iconContainer}>
               <Feather name="plus" size={24} color={colors.black} />
             </View>

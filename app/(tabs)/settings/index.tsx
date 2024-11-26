@@ -9,6 +9,7 @@ import { colors } from '@/app/constants/colors';
 
 export default function UserPage() {
   const options = [
+    { icon: 'user', label: 'Perfil', onPress: () => {} },
     { icon: 'settings', label: 'Settings', onPress: () => {} },
     { icon: 'file-text', label: 'Estados de cuenta', onPress: () => {} },
     { icon: 'shield', label: 'Seguridad', onPress: () => {} },
