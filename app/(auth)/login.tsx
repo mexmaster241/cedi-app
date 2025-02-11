@@ -1,43 +1,69 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  Easing
-} from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { colors } from '../constants/colors';
+import { supabase } from '@/app/src/db';
+import NetInfo from "@react-native-community/netinfo";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
-  const formTranslateY = useSharedValue(-50);
-  const buttonScale = useSharedValue(0.8);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  useEffect(() => {
-    formTranslateY.value = withSpring(0);
-    buttonScale.value = withSpring(1);
-  }, []);
+  const handleLogin = async () => {
+    try {
+      setErrorMessage('');
+      if (!email || !password) {
+        setErrorMessage('Por favor ingresa tu email y contraseña');
+        return;
+      }
+      
+      // Check network status
+      const networkState = await NetInfo.fetch();
+      if (!networkState.isConnected) {
+        setErrorMessage('No hay conexión a internet');
+        return;
+      }
 
-  const formAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: formTranslateY.value }],
-    opacity: withTiming(1, { duration: 800 })
-  }));
-
-  const buttonAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: buttonScale.value }]
-  }));
+      const trimmedEmail = email.trim().toLowerCase();
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password
+      });
+      
+      if (error) throw error;
+      
+      if (data.user) {
+        router.replace('/');
+      }
+      
+    } catch (error: any) {
+      console.error('Login error:', error);
+      
+      switch(error.message) {
+        case 'Email not confirmed':
+          setErrorMessage('Por favor verifica tu cuenta de email');
+          break;
+        case 'Invalid login credentials':
+          setErrorMessage('Email o contraseña incorrectos');
+          break;
+        case 'User not found':
+          setErrorMessage('No existe una cuenta con este email');
+          break;
+        default:
+          setErrorMessage('Hubo un error inesperado. Por favor intenta de nuevo.');
+      }
+    }
+  };
 
   return (
     <LinearGradient
       colors={['rgba(249,246,244,1)', 'rgba(249,246,244,1)', 'rgba(232,217,202,1)']}
       style={styles.container}
     >
-      <Animated.View style={[styles.formContainer, formAnimatedStyle]}>
+      <View style={styles.formContainer}>
         <Text style={styles.title}>Empieza tu camino</Text>
         
         <View style={styles.inputContainer}>
@@ -65,20 +91,20 @@ export default function LoginScreen() {
 
         <View style={styles.signupContainer}>
           <Text style={styles.signupText}>¿No tienes cuenta? </Text>
-          <TouchableOpacity onPress={() => router.push('/')}>
+          <TouchableOpacity onPress={() => router.push('https://main.d3n362okhpkge4.amplifyapp.com/sign-up')}>
             <Text style={styles.signupLink}>Aplica aquí</Text>
           </TouchableOpacity>
         </View>
-      </Animated.View>
+      </View>
 
-      <Animated.View style={[styles.buttonContainer, buttonAnimatedStyle]}>
+      <View style={styles.buttonContainer}>
         <TouchableOpacity 
           style={styles.button}
-          onPress={() => router.push('/')}
+          onPress={handleLogin}
         >
           <Text style={styles.buttonText}>Ingresa</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     </LinearGradient>
   );
 }

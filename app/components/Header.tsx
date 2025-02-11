@@ -1,8 +1,33 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { colors } from '../constants/colors';
+import { useState, useEffect } from 'react';
+import { getCurrentUser } from '@/app/src/db';
+import { Skeleton } from './Skeleton';
+import { db } from '@/app/src/db';
 
 export function Header() {
+  const [fullName, setFullName] = useState("Loading...");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchUserData() {
+      try {
+        const currentUser = await getCurrentUser();
+        const userEmail = currentUser?.email;
+        const userProfile = await db.users.get(userEmail!);
+        const name = `${userProfile?.name || ""}`.trim();
+        setFullName(name || "Usuario");
+      } catch (err) {
+        console.error("Error fetching user data:", err);
+        setFullName("Usuario");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchUserData();
+  }, []);
+
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
@@ -14,7 +39,11 @@ export function Header() {
       </View>
       <View style={styles.welcomeContainer}>
         <Text style={styles.greeting}>Bienvenido de nuevo</Text>
-        <Text style={styles.name}>John Doe</Text>
+        {isLoading ? (
+          <Skeleton width={150} height={28} />
+        ) : (
+          <Text style={styles.name}>{fullName}</Text>
+        )}
       </View>
     </View>
   );

@@ -4,30 +4,88 @@ import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/app/constants/colors';
+import { useState, useEffect } from 'react';
+import { getCurrentUser } from '@/app/src/db';
+import { db } from '@/app/src/db';
+import { Skeleton } from '@/app/components/Skeleton';
+import React from 'react';
 
-// Mock data for recipients
-const mockRecipients = [
-  { id: '1', name: 'Juan Pérez', accountNumber: '****1234' },
-  { id: '2', name: 'María García', accountNumber: '****5678' },
-  { id: '3', name: 'Carlos López', accountNumber: '****9012' },
-];
+interface Contact {
+  id: string;
+  name: string;
+  alias?: string;
+  clabe?: string;
+  card?: string;
+  phone?: string;
+}
 
 export default function SelectRecipientScreen() {
-  const { amount } = useLocalSearchParams<{ amount: string }>();
+  const { amount, commission } = useLocalSearchParams<{ amount: string, commission: string }>();
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleRecipientSelect = (recipient: typeof mockRecipients[0]) => {
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchContacts() {
+      try {
+        const currentUser = await getCurrentUser();
+        const userEmail = currentUser?.email;
+        
+        if (!userEmail) {
+          throw new Error('No email found for user');
+        }
+
+        // Get user ID first
+        const userId = await db.users.getUserId(userEmail);
+        if (!userId) {
+          throw new Error('User ID not found');
+        }
+
+        // Fetch contacts using userId
+        const userContacts = await db.contacts.list(userId);
+        
+        if (isMounted) {
+          setContacts(userContacts as Contact[]);
+        }
+      } catch (err) {
+        console.error('Error fetching contacts:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchContacts();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleRecipientSelect = (contact: Contact) => {
     router.push({
       pathname: '/deposit/confirm',
       params: {
         amount,
-        recipientName: recipient.name,
-        accountNumber: recipient.accountNumber,
+        commission,
+        recipientId: contact.id,
+        recipientName: contact.alias || contact.name,
+        accountNumber: contact.clabe || contact.card || contact.phone,
       },
     });
   };
 
   const handleNewRecipient = () => {
-    router.push('/deposit/new');
+    router.push({
+      pathname: '/deposit/new',
+      params: { amount, commission }
+    });
+  };
+
+  const getAccountPreview = (contact: Contact) => {
+    if (contact.clabe) return `CLABE: ****${contact.clabe.slice(-4)}`;
+    if (contact.card) return `Tarjeta: ****${contact.card.slice(-4)}`;
+    if (contact.phone) return `Cel: ****${contact.phone.slice(-4)}`;
+    return '';
   };
 
   return (
@@ -55,29 +113,53 @@ export default function SelectRecipientScreen() {
             <Text style={styles.newRecipientText}>Nuevo destinatario</Text>
           </TouchableOpacity>
 
-          <Text style={styles.sectionTitle}>Recientes</Text>
+          <Text style={styles.sectionTitle}>Contactos guardados</Text>
 
-          <FlatList
-            data={mockRecipients}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={styles.recipientItem}
-                onPress={() => handleRecipientSelect(item)}
-              >
+          {isLoading ? (
+            [...Array(3)].map((_, index) => (
+              <View key={index} style={styles.recipientItem}>
                 <View style={styles.avatarContainer}>
-                  <Text style={styles.avatarText}>
-                    {item.name.charAt(0)}
-                  </Text>
+                  <Skeleton width={40} height={40} />
                 </View>
                 <View style={styles.recipientInfo}>
-                  <Text style={styles.recipientName}>{item.name}</Text>
-                  <Text style={styles.accountNumber}>{item.accountNumber}</Text>
+                  <Skeleton width={150} height={20} />
+                  <View style={{ marginTop: 4 }}>
+                    <Skeleton width={100} height={16} />
+                  </View>
                 </View>
-                <Feather name="chevron-right" size={24} color={colors.lightGray} />
-              </TouchableOpacity>
-            )}
-          />
+              </View>
+            ))
+          ) : contacts.length > 0 ? (
+            <FlatList
+              data={contacts}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.recipientItem}
+                  onPress={() => handleRecipientSelect(item)}
+                >
+                  <View style={styles.avatarContainer}>
+                    <Text style={styles.avatarText}>
+                      {(item.alias || item.name).charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.recipientInfo}>
+                    <Text style={styles.recipientName}>
+                      {item.alias || item.name}
+                    </Text>
+                    <Text style={styles.accountNumber}>
+                      {getAccountPreview(item)}
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={24} color={colors.lightGray} />
+                </TouchableOpacity>
+              )}
+            />
+          ) : (
+            <Text style={styles.emptyText}>
+              No hay contactos guardados
+            </Text>
+          )}
         </View>
       </SafeAreaView>
     </>
@@ -169,5 +251,12 @@ const styles = StyleSheet.create({
   accountNumber: {
     fontSize: 14,
     color: colors.darkGray,
+  },
+  emptyText: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 14,
+    color: colors.darkGray,
+    textAlign: 'center',
+    marginTop: 24,
   },
 });

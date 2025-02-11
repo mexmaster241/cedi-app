@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "cedi-app",
-    "slug": "cedi-app",
+    "slug": "cedi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -35,13 +35,24 @@
       ],
       [
         "expo-font",
-          {
-          "fonts": ["assets/fonts/ClashDisplay-Regular.otf"]
+        {
+          "fonts": [
+            "assets/fonts/ClashDisplay-Regular.otf"
+          ]
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "9e40d20b-11da-4d96-babc-e6e69ba2df84"
+      }
+    },
+    "owner": "cedi0s"
   }
 }

@@ -1,30 +1,118 @@
 import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { useState, useEffect } from 'react';
+import { getCurrentUser } from '@/app/src/db';
+import { db } from '@/app/src/db';
+import { Skeleton } from './Skeleton';
 
-const mockTransactions = [
-  { id: '1', title: 'Grocery Store', amount: -85.50, date: '2024-03-20' },
-  { id: '2', title: 'Salary Deposit', amount: 2500.00, date: '2024-03-19' },
-  { id: '3', title: 'Restaurant', amount: -45.80, date: '2024-03-18' },
-];
+interface Movement {
+  id: string;
+  category: string;      
+  direction: string;     
+  status: string;        
+  final_amount: number;
+  counterparty_name: string;
+  concept?: string;
+  created_at?: string;
+}
 
 export function Transactions() {
+  const [movements, setMovements] = useState<Movement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchMovements() {
+      try {
+        const currentUser = await getCurrentUser();
+        const userEmail = currentUser?.email;
+        
+        if (!userEmail) {
+          throw new Error('No email found for user');
+        }
+
+        // Get user ID first
+        const userId = await db.users.getUserId(userEmail);
+        if (!userId) {
+          throw new Error('User ID not found');
+        }
+
+        // Fetch movements using userId
+        const userMovements = await db.movements.list(userId);
+        
+        if (isMounted) {
+          const sortedMovements = userMovements.sort((a, b) => {
+            return new Date(b?.createdAt ?? 0).getTime() - 
+                   new Date(a?.createdAt ?? 0).getTime();
+          });
+
+          setMovements(sortedMovements.slice(0, 20) as Movement[]); // Show last 20 movements
+        }
+      } catch (err) {
+        console.error('Error fetching movements:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchMovements();
+    return () => { isMounted = false; };
+  }, []);
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('es-MX');
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Transacciones recientes</Text>
-      <FlatList
-        data={mockTransactions}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.transaction}>
-            <View>
-              <Text style={styles.transactionTitle}>{item.title}</Text>
-              <Text style={styles.date}>{item.date}</Text>
+      {isLoading ? (
+        [...Array(3)].map((_, index) => (
+          <View key={index} style={styles.transaction}>
+            <View style={styles.transactionInfo}>
+              <Skeleton width={150} height={20} />
+              <View style={{ marginTop: 4 }}>
+                <Skeleton width={100} height={16} />
+              </View>
+              <View style={{ marginTop: 4 }}>
+                <Skeleton width={120} height={16} />
+              </View>
             </View>
-            <Text style={[styles.amount, { color: item.amount > 0 ? '#22c55e' : '#ef4444' }]}>
-              ${Math.abs(item.amount).toFixed(2)}
-            </Text>
+            <Skeleton width={80} height={20} />
           </View>
-        )}
-      />
+        ))
+      ) : (
+        <FlatList
+          data={movements}
+          keyExtractor={(item) => item.id}
+          style={styles.list}
+          renderItem={({ item }) => (
+            <View style={styles.transaction}>
+              <View style={styles.transactionInfo}>
+                <Text style={styles.transactionTitle}>
+                  {item.direction === 'INBOUND' ? 'Depósito de ' : 'Transferencia a '}
+                  {item.counterparty_name}
+                </Text>
+                {item.concept && (
+                  <Text style={styles.concept}>{item.concept}</Text>
+                )}
+                <Text style={styles.date}>{formatDate(item.created_at)}</Text>
+              </View>
+              <Text 
+                style={[
+                  styles.final_amount, 
+                  { color: item.direction === 'INBOUND' ? '#22c55e' : '#ef4444' }
+                ]}
+              >
+                ${Math.abs(item.final_amount).toFixed(2)}
+              </Text>
+            </View>
+          )}
+        />
+      )}
     </View>
   );
 }
@@ -32,10 +120,14 @@ export function Transactions() {
 const styles = StyleSheet.create({
   container: {
     width: '90%',
-    marginTop: 24,
+    height: 400,
     backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 16,
+    marginTop: 24,
+  },
+  list: {
+    flex: 1,
   },
   title: {
     fontFamily: 'ClashDisplay',
@@ -46,22 +138,32 @@ const styles = StyleSheet.create({
   transaction: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#d1d5db',
+  },
+  transactionInfo: {
+    flex: 1,
+    marginRight: 8,
   },
   transactionTitle: {
     fontFamily: 'ClashDisplay',
     fontSize: 16,
     color: '#000000',
   },
+  concept: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 14,
+    color: '#4b5563',
+    marginTop: 2,
+  },
   date: {
     fontSize: 14,
     color: '#6b7280',
-    marginTop: 4,
+    marginTop: 2,
   },
-  amount: {
+  final_amount: {
     fontFamily: 'ClashDisplay',
     fontSize: 16,
   },

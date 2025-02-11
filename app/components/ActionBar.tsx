@@ -1,9 +1,10 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors } from '../constants/colors';
+
 import { Ionicons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
 import { useRouter, usePathname } from 'expo-router';
+import { colors } from '../constants/colors';
 
 export function ActionBar() {
   const router = useRouter();
