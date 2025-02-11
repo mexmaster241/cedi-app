@@ -75,7 +75,7 @@ export default function DepositScreen() {
       Toast.show({
         type: 'error',
         text1: 'Saldo insuficiente',
-        text2: `Necesitas $${totalAmount.toFixed(2)} para esta transferencia`,
+        text2: `Broka ass`,
         position: 'bottom',
         visibilityTime: 3000,
       });

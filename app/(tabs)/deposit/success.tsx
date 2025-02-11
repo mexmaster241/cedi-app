@@ -9,20 +9,16 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 interface Movement {
-  id: string;
-  claveRastreo: string;
-  createdAt?: string;
-  counterpartyName: string;
+  clave_rastreo: string;
+  createdAt: string;
   beneficiaryName: string;
   bankName: string;
   direction: string;
   amount: number;
   commission: number;
   finalAmount: number;
-  externalReference?: string;
-  internalReference?: string;
   counterpartyBank: string;
-  counterpartyClabe?: string;
+  counterpartyClabe: string;
   concept?: string;
   concept2?: string;
   status: string;
@@ -36,15 +32,19 @@ export default function SuccessScreen() {
     if (params.movementData) {
       try {
         const parsedMovement = JSON.parse(params.movementData);
-        const processedMovement = {
-          ...parsedMovement,
+        const processedMovement: Movement = {
+          clave_rastreo: parsedMovement.clave_rastreo,
+          createdAt: parsedMovement.createdAt,
           beneficiaryName: parsedMovement.beneficiaryName,
           bankName: parsedMovement.bankName,
+          direction: parsedMovement.direction,
           amount: Number(parsedMovement.amount),
           commission: Number(parsedMovement.commission),
           finalAmount: Number(parsedMovement.amount) + Number(parsedMovement.commission),
-          createdAt: new Date().toISOString(),
-          claveRastreo: parsedMovement.claveRastreo,
+          counterpartyBank: parsedMovement.counterpartyBank,
+          counterpartyClabe: parsedMovement.counterpartyClabe,
+          concept: parsedMovement.concept,
+          concept2: parsedMovement.concept2,
           status: parsedMovement.status || 'COMPLETED'
         };
         setMovement(processedMovement);
@@ -88,7 +88,7 @@ export default function SuccessScreen() {
           <div class="header">
             <img src="https://your-domain.com/logotipo.png" class="logo" />
             <h2>Comprobante de Transferencia</h2>
-            <p>#${movement.claveRastreo}</p>
+            <p>#${movement.clave_rastreo}</p>
           </div>
 
           <div class="details">
@@ -193,7 +193,7 @@ export default function SuccessScreen() {
       <View style={styles.content}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Comprobante de Transferencia</Text>
-          <Text style={styles.reference}>#{movement?.claveRastreo}</Text>
+          <Text style={styles.reference}>#{movement?.clave_rastreo}</Text>
 
           <View style={styles.detailsSection}>
             <DetailRow 

@@ -15,7 +15,7 @@ interface MovementData {
   beneficiaryName: string;
   bankName: string;
   accountNumber: string;
-  claveRastreo?: string;
+  clave_rastreo: string;
   concept?: string;
   concept2?: string;
   status?: string;
@@ -73,7 +73,7 @@ export default function ProcessingScreen() {
           contentFit="contain"
         />
         </View>
-      <Text style={styles.loadingText}>¡Transferencia exitosa!</Text>
+      <Text style={styles.loadingText}>Procesando transferencia...</Text>
       <View style={styles.loaderContainer}>
         <Animated.View 
           style={[

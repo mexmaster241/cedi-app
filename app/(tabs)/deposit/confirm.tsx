@@ -259,7 +259,7 @@ export default function ConfirmDepositScreen() {
     amount: number,
     concept: string,
     concept2?: string
-  ): Promise<{ newSenderBalance: number } | undefined> => {
+  ): Promise<{ newSenderBalance: number; claveRastreo: string } | undefined> => {
     try {
       const currentUser = await getCurrentUser();
       if (!currentUser?.id) {
@@ -407,7 +407,7 @@ export default function ConfirmDepositScreen() {
         ] : [])
       ]);
 
-      return { newSenderBalance };
+      return { newSenderBalance, claveRastreo };
     } catch (error) {
       throw error;
     }
@@ -427,7 +427,6 @@ export default function ConfirmDepositScreen() {
 
     try {
       setIsLoading(true);
-
       const result = await handleTransfer(
         accountNumber,
         parseFloat(amount),
@@ -448,16 +447,20 @@ export default function ConfirmDepositScreen() {
           pathname: '/(tabs)/deposit/processing',
           params: {
             movementData: JSON.stringify({
-              amount: Number(amount),
-              commission: COMMISSION_AMOUNT,
-              finalAmount: Number(amount) + COMMISSION_AMOUNT,
+              clave_rastreo: result.claveRastreo,
+              amount,
+              commission: appliedCommission,
+              finalAmount: amount + appliedCommission,
               recipientName,
               beneficiaryName: recipientName,
-              bankName: BANK_CODES[accountNumber.substring(0, 3)]?.name,
-              accountNumber,
+              bankName: BANK_CODES[accountNumber.substring(0, 3)]?.name || 'Unknown Bank',
+              counterpartyClabe: accountNumber,
+              counterpartyBank: BANK_CODES[accountNumber.substring(0, 3)]?.name || 'Unknown Bank',
               concept,
               concept2,
-              claveRastreo: ''
+              status: 'COMPLETED',
+              createdAt: new Date().toISOString(),
+              direction: 'OUTBOUND'
             })
           }
         });
