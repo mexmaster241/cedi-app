@@ -38,7 +38,7 @@ export default function LoginScreen() {
       if (error) throw error;
       
       if (data.user) {
-        router.replace('/');
+        router.push('/');
       }
       
     } catch (error: any) {

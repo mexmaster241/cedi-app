@@ -23,7 +23,7 @@ export default function Index() {
     const checkUser = async () => {
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error || !session) {
-        router.replace('/login');
+        router.replace('/intro');
       }
     };
 

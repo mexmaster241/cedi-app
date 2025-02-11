@@ -12,7 +12,7 @@ export default function UserPage() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      router.replace('/login');
+      router.replace('/intro');
     } catch (error) {
       console.error('Error logging out:', error);
     }

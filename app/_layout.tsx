@@ -21,16 +21,21 @@ export default function RootLayout() {
   useEffect(() => {
     async function init() {
       try {
-        // First check auth session
         const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (error || !session) {
+        if (error) {
+          console.error('Session error:', error);
           setIsAuthenticated(false);
           return;
         }
 
-        // If we have a session, user is authenticated
-        setIsAuthenticated(true);
+        if (session?.user) {
+          console.log('User authenticated:', session.user.id);
+          setIsAuthenticated(true);
+        } else {
+          console.log('No session found');
+          setIsAuthenticated(false);
+        }
       } catch (error) {
         console.error('Auth check error:', error);
         setIsAuthenticated(false);
@@ -39,19 +44,34 @@ export default function RootLayout() {
       }
     }
     init();
+
+    // Add auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event);
+        setIsAuthenticated(!!session);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
     if (isAuthChecking) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    console.log('Current segment:', segments[0], 'inAuthGroup:', inAuthGroup, 'isAuthenticated:', isAuthenticated);
 
     if (!isAuthenticated && !inAuthGroup) {
-      router.replace('/login');
+      console.log('Redirecting to login');
+      router.replace('/intro');
     } else if (isAuthenticated && inAuthGroup) {
+      console.log('Redirecting to home');
       router.replace('/');
     }
-  }, [isAuthChecking, isAuthenticated, segments]); 
+  }, [isAuthChecking, isAuthenticated, segments]);
 
   useEffect(() => {
     if (fontsLoaded && !isAuthChecking) {
