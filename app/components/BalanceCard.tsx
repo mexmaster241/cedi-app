@@ -53,11 +53,13 @@ export function BalanceCard() {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.label}>Balance disponible</Text>
+      <Text style={[styles.label, { textAlign: 'center' }]}>Balance disponible</Text>
       {isLoading ? (
-        <Skeleton width={200} height={38} />
+        <View style={{ alignItems: 'center' }}>
+          <Skeleton width={200} height={38} />
+        </View>
       ) : (
-        <Text style={styles.balance}>${formattedBalance}</Text>
+        <Text style={[styles.balance, { textAlign: 'center' }]}>${formattedBalance}</Text>
       )}
     </View>
   );
@@ -83,10 +85,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.darkGray,
     marginBottom: 8,
+    textAlign: 'center',
   },
   balance: {
     fontFamily: 'ClashDisplay',
     fontSize: 32,
     color: colors.black,
+    textAlign: 'center',
   },
 });

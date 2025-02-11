@@ -25,7 +25,7 @@ export function Header() {
         if (error) throw error;
         
         // Construct full name from given_name and family_name
-        const name = `${userProfile?.given_name || ''} ${userProfile?.family_name || ''}`.trim();
+        const name = `${userProfile?.given_name || ''} `.trim();
         setFullName(name || "Usuario");
       } catch (err) {
         console.error("Error fetching user data:", err);
@@ -47,7 +47,7 @@ export function Header() {
         />
       </View>
       <View style={styles.welcomeContainer}>
-        <Text style={styles.greeting}>Bienvenido de nuevo</Text>
+        <Text style={styles.greeting}>Bienvenid@ de nuevo</Text>
         {isLoading ? (
           <Skeleton width={150} height={28} />
         ) : (

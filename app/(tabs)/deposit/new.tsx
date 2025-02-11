@@ -94,7 +94,7 @@ const BANK_CODES: { [key: string]: Bank } = {
   "634": { code: "634", name: "FINCOMUN" },
   "636": { code: "636", name: "HDI SEGUROS" },
   "637": { code: "637", name: "ORDER" },
-  "638": { code: "638", name: "AKALA" },
+  "638": { code: "638", name: "NU MEXICO" },
   "640": { code: "640", name: "C.B. JP MORGAN" },
   "642": { code: "642", name: "REFORMA" },
   "646": { code: "646", name: "STP" },

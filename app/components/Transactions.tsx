@@ -70,48 +70,54 @@ export function Transactions() {
     <View style={styles.container}>
       <Text style={styles.title}>Transacciones recientes</Text>
       {isLoading ? (
-        [...Array(3)].map((_, index) => (
-          <View key={index} style={styles.transaction}>
-            <View style={styles.transactionInfo}>
-              <Skeleton width={150} height={20} />
-              <View style={{ marginTop: 4 }}>
-                <Skeleton width={100} height={16} />
-              </View>
-              <View style={{ marginTop: 4 }}>
-                <Skeleton width={120} height={16} />
-              </View>
-            </View>
-            <Skeleton width={80} height={20} />
-          </View>
-        ))
-      ) : (
-        <FlatList
-          data={movements}
-          keyExtractor={(item) => item.id}
-          style={styles.list}
-          renderItem={({ item }) => (
-            <View style={styles.transaction}>
+        <View>
+          {[...Array(3)].map((_, index) => (
+            <View key={index} style={styles.transaction}>
               <View style={styles.transactionInfo}>
-                <Text style={styles.transactionTitle}>
-                  {item.direction === 'INBOUND' ? 'Depósito de ' : 'Transferencia a '}
-                  {item.counterparty_name}
-                </Text>
-                {item.concept && (
-                  <Text style={styles.concept}>{item.concept}</Text>
-                )}
-                <Text style={styles.date}>{formatDate(item.created_at)}</Text>
+                <Skeleton width={150} height={20} />
+                <View style={{ marginTop: 4 }}>
+                  <Skeleton width={100} height={16} />
+                </View>
+                <View style={{ marginTop: 4 }}>
+                  <Skeleton width={120} height={16} />
+                </View>
               </View>
-              <Text 
-                style={[
-                  styles.final_amount, 
-                  { color: item.direction === 'INBOUND' ? '#22c55e' : '#ef4444' }
-                ]}
-              >
-                ${Math.abs(item.final_amount).toFixed(2)}
-              </Text>
+              <Skeleton width={80} height={20} />
             </View>
-          )}
-        />
+          ))}
+        </View>
+      ) : (
+        <View style={styles.listContainer}>
+          <FlatList
+            data={movements}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={true}
+            nestedScrollEnabled={true}
+            style={styles.list}
+            renderItem={({ item }) => (
+              <View style={styles.transaction}>
+                <View style={styles.transactionInfo}>
+                  <Text style={styles.transactionTitle}>
+                    {item.direction === 'INBOUND' ? 'Depósito de ' : 'Transferencia a '}
+                    {item.counterparty_name}
+                  </Text>
+                  {item.concept && (
+                    <Text style={styles.concept}>{item.concept}</Text>
+                  )}
+                  <Text style={styles.date}>{formatDate(item.created_at)}</Text>
+                </View>
+                <Text 
+                  style={[
+                    styles.final_amount, 
+                    { color: item.direction === 'INBOUND' ? '#22c55e' : '#ef4444' }
+                  ]}
+                >
+                  ${Math.abs(item.final_amount).toFixed(2)}
+                </Text>
+              </View>
+            )}
+          />
+        </View>
       )}
     </View>
   );
@@ -125,6 +131,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginTop: 24,
+  },
+  listContainer: {
+    flex: 1,
   },
   list: {
     flex: 1,

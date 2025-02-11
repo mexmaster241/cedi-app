@@ -121,14 +121,6 @@ export default function SuccessScreen() {
               <span class="label">Monto:</span>
               <span>${formatAmount(movement.amount)}</span>
             </div>
-            <div class="row">
-              <span class="label">Comisión:</span>
-              <span>${formatAmount(movement.commission)}</span>
-            </div>
-            <div class="row total">
-              <span>Monto Final:</span>
-              <span>${formatAmount(movement.finalAmount)}</span>
-            </div>
           </div>
         </body>
       </html>
@@ -220,21 +212,12 @@ export default function SuccessScreen() {
             />
           </View>
 
-          <View style={styles.amountsSection}>
-            <DetailRow 
-              label="Monto" 
-              value={formatAmount(movement?.amount || 0)} 
-            />
-            <DetailRow 
-              label="Comisión" 
-              value={formatAmount(movement?.commission || 0)} 
-            />
-          </View>
+         
 
           <View style={styles.totalSection}>
             <DetailRow 
-              label="Monto Final" 
-              value={formatAmount(movement?.finalAmount || 0)} 
+              label="Monto" 
+              value={formatAmount(movement?.amount || 0)} 
               isTotal 
             />
           </View>
@@ -312,6 +295,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: 'ClashDisplay',
+    alignItems:"center",
     fontSize: 20,
     color: colors.black,
     marginLeft: 16,
