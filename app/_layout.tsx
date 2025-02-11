@@ -3,11 +3,10 @@ import { useEffect, useState } from "react";
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter, useSegments } from 'expo-router';
-import { getCurrentUser } from '@/app/src/db';
+import { supabase } from '@/app/src/db';
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
-
 
 export default function RootLayout() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
@@ -22,9 +21,18 @@ export default function RootLayout() {
   useEffect(() => {
     async function init() {
       try {
-        await getCurrentUser();
+        // First check auth session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error || !session) {
+          setIsAuthenticated(false);
+          return;
+        }
+
+        // If we have a session, user is authenticated
         setIsAuthenticated(true);
       } catch (error) {
+        console.error('Auth check error:', error);
         setIsAuthenticated(false);
       } finally {
         setIsAuthChecking(false);
@@ -39,7 +47,7 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === "(auth)";
 
     if (!isAuthenticated && !inAuthGroup) {
-      router.replace('/(auth)/intro');
+      router.replace('/login');
     } else if (isAuthenticated && inAuthGroup) {
       router.replace('/');
     }

@@ -273,15 +273,17 @@ export default function NewRecipient() {
     setIsLoading(true);
     try {
       const currentUser = await getCurrentUser();
-      const userEmail = currentUser?.email;
+      if (!currentUser?.id) {
+        throw new Error('No user authenticated');
+      }
+
       const bankName = BANK_CODES[selectedBank as keyof typeof BANK_CODES]?.name || 'Unknown Bank';
       const newContact = await db.contacts.create({
-        user_id: userEmail!,
+        user_id: currentUser.id,
         clabe: account,
         name: name,
         alias: alias || name,
         bank: bankName,
-      
       });
 
       if (newContact.data) {
@@ -300,7 +302,6 @@ export default function NewRecipient() {
             accountNumber: newContact.data.clabe,
             amount: params.amount,
             bank: newContact.data.bank,
-            
           }
         });
       }

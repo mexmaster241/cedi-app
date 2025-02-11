@@ -5,16 +5,26 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors } from '@/app/constants/colors';
-
+import { supabase } from '@/app/src/db';
 
 export default function UserPage() {
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      router.replace('/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
   const options = [
     { icon: 'user', label: 'Perfil', onPress: () => {} },
     { icon: 'settings', label: 'Settings', onPress: () => {} },
     { icon: 'file-text', label: 'Estados de cuenta', onPress: () => {} },
     { icon: 'shield', label: 'Seguridad', onPress: () => {} },
     { icon: 'help-circle', label: 'Help', onPress: () => {} },
-    { icon: 'log-out', label: 'Log out', onPress: () => {} },
+    { icon: 'log-out', label: 'Cerrar sesión', onPress: handleLogout },
   ];
 
   return (

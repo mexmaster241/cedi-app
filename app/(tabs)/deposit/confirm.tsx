@@ -248,6 +248,11 @@ export default function ConfirmDepositScreen() {
   const [concept2, setConcept2] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Add state for commission visibility
+  const isInternalTransfer = accountNumber?.startsWith('6461805278');
+  const appliedCommission = isInternalTransfer ? 0 : COMMISSION_AMOUNT;
+  const totalAmount = Number(amount) + appliedCommission;
+
   const handleTransfer = async (
     recipientClabe: string,
     amount: number,
@@ -270,7 +275,13 @@ export default function ConfirmDepositScreen() {
 
       // Get sender's details
       const sender = await db.users.get(senderId);
-      if (!sender || sender.balance! < (amount + COMMISSION_AMOUNT)) {
+      
+      // Check if it's an internal transfer (to CEDI account)
+      const isInternalTransfer = recipientClabe.startsWith('6461805278');
+      const appliedCommission = isInternalTransfer ? 0 : COMMISSION_AMOUNT;
+
+      // Check balance including commission
+      if (!sender || sender.balance! < (amount + appliedCommission)) {
         throw new Error('Insufficient funds');
       }
 
@@ -311,7 +322,7 @@ export default function ConfirmDepositScreen() {
       };
 
       // Update balances
-      const newSenderBalance = sender.balance! - (amount + COMMISSION_AMOUNT);
+      const newSenderBalance = sender.balance! - (amount + appliedCommission);
       await Promise.all([
         // Update sender's balance while preserving other fields
         db.users.createOrUpdate({ 
@@ -333,7 +344,7 @@ export default function ConfirmDepositScreen() {
         db.users.createOrUpdate({ 
           ...commissionAccount,
           id: commissionAccount.id, 
-          balance: (commissionAccount.balance || 0) + COMMISSION_AMOUNT 
+          balance: (commissionAccount.balance || 0) + appliedCommission 
         })
       ]);
 
@@ -342,12 +353,12 @@ export default function ConfirmDepositScreen() {
         // Sender's movement
         db.movements.create({
           user_id: senderId,
-          category: 'WIRE',
+          category: isInternalTransfer ? 'INTERNAL' : 'WIRE',
           direction: 'OUTBOUND',
           status: 'COMPLETED',
           amount,
-          commission: COMMISSION_AMOUNT,
-          final_amount: amount + COMMISSION_AMOUNT,
+          commission: appliedCommission,
+          final_amount: amount + appliedCommission,
           clave_rastreo: claveRastreo,
           counterparty_clabe: recipientClabe,
           counterparty_name: recipientName,
@@ -382,9 +393,9 @@ export default function ConfirmDepositScreen() {
           category: 'INTERNAL',
           direction: 'INBOUND',
           status: 'COMPLETED',
-          amount: COMMISSION_AMOUNT,
+          amount: appliedCommission,
           commission: 0,
-          final_amount: COMMISSION_AMOUNT,
+          final_amount: appliedCommission,
           clave_rastreo: claveRastreo,
           counterparty_clabe: sender.clabe || senderId,
           counterparty_name: senderFullName,
@@ -488,12 +499,19 @@ export default function ConfirmDepositScreen() {
           </View>
 
           <View style={styles.detailsCard}>
-            <Text style={styles.label}>Comisión</Text>
-            <Text style={styles.value}>${COMMISSION_AMOUNT.toFixed(2)}</Text>
-            <Text style={styles.label}>Total</Text>
-            <Text style={styles.totalValue}>
-              ${(parseFloat(amount) + COMMISSION_AMOUNT).toFixed(2)}
-            </Text>
+            <Text style={styles.label}>Monto:</Text>
+            <Text style={styles.value}>${amount}</Text>
+
+            {/* Only show commission if not internal transfer */}
+            {!isInternalTransfer && (
+              <>
+                <Text style={styles.label}>Comisión:</Text>
+                <Text style={styles.value}>${COMMISSION_AMOUNT.toFixed(2)}</Text>
+              </>
+            )}
+
+            <Text style={styles.label}>Total:</Text>
+            <Text style={styles.totalValue}>${totalAmount.toFixed(2)}</Text>
           </View>
 
           <View style={styles.recipientCard}>

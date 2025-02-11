@@ -2,9 +2,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { colors } from '../constants/colors';
 import { useState, useEffect } from 'react';
-import { getCurrentUser } from '@/app/src/db';
+import { supabase } from '@/app/src/db';
 import { Skeleton } from './Skeleton';
-import { db } from '@/app/src/db';
 
 export function Header() {
   const [fullName, setFullName] = useState("Loading...");
@@ -13,10 +12,20 @@ export function Header() {
   useEffect(() => {
     async function fetchUserData() {
       try {
-        const currentUser = await getCurrentUser();
-        const userEmail = currentUser?.email;
-        const userProfile = await db.users.get(userEmail!);
-        const name = `${userProfile?.name || ""}`.trim();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('No authenticated user');
+
+        // Updated column names to match the database schema
+        const { data: userProfile, error } = await supabase
+          .from('users')
+          .select('given_name, family_name')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+        
+        // Construct full name from given_name and family_name
+        const name = `${userProfile?.given_name || ''} ${userProfile?.family_name || ''}`.trim();
         setFullName(name || "Usuario");
       } catch (err) {
         console.error("Error fetching user data:", err);

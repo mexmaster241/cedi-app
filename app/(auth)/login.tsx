@@ -5,11 +5,13 @@ import { router } from 'expo-router';
 import { colors } from '../constants/colors';
 import { supabase } from '@/app/src/db';
 import NetInfo from "@react-native-community/netinfo";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     try {
@@ -80,13 +82,25 @@ export default function LoginScreen() {
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Contraseña</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="********"
-            secureTextEntry
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={[styles.input, styles.passwordInput]}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="********"
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity 
+              style={styles.eyeIcon}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <Ionicons 
+                name={showPassword ? 'eye-off' : 'eye'} 
+                size={24} 
+                color="black" 
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.signupContainer}>
@@ -178,5 +192,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.black,
     textDecorationLine: 'underline',
+  },
+  passwordContainer: {
+    position: 'relative',
+    width: '100%',
+  },
+  passwordInput: {
+    paddingRight: 50,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -12 }],
   },
 });
