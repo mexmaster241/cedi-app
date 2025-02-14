@@ -10,6 +10,7 @@ import { db } from '@/app/src/db';
 import Toast from 'react-native-toast-message';
 import React from 'react';
 import { supabase, supabaseAdmin } from '@/app/src/db';
+import { SpeiService } from '@/app/components/spei.service';
 
 const COMMISSION_AMOUNT = 5.80;
 const COMMISSION_CLABE = '646180527800000009';
@@ -260,6 +261,8 @@ export default function ConfirmDepositScreen() {
     concept: string,
     concept2?: string
   ): Promise<{ newSenderBalance: number; claveRastreo: string } | undefined> => {
+    let speiResponse: any = null;
+
     try {
       const currentUser = await getCurrentUser();
       if (!currentUser?.id) {
@@ -278,53 +281,53 @@ export default function ConfirmDepositScreen() {
         throw new Error('Insufficient funds');
       }
 
-      const { data: recipientUsers, error: recipientError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('clabe', recipientClabe);
-
-      if (recipientError) throw recipientError;
-
-      const recipient = recipientUsers?.[0];
-      if (!recipient) {
-        throw new Error('Recipient not found');
-      }
-
-      let commissionAccount;
-      if (!isInternalTransfer) {
-        const { data: commissionAccounts, error: searchError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('clabe', COMMISSION_CLABE)
-          .single();
-
-        if (searchError && searchError.code !== 'PGRST116') throw searchError;
-
-        if (!commissionAccounts) {
-          const { data: newCommissionAccount, error: createError } = await supabase
-            .from('users')
-            .insert([{
-              clabe: COMMISSION_CLABE,
-              given_name: 'Comisiones',
-              family_name: 'CEDI',
-              balance: 0
-            }])
-            .select()
-            .single();
-
-          if (createError) throw createError;
-          commissionAccount = newCommissionAccount;
-        } else {
-          commissionAccount = commissionAccounts;
-        }
-      }
-
+      // Generate tracking number
       const claveRastreo = `CEDI${Math.floor(10000000 + Math.random() * 90000000)}`;
       const recipientBankCode = recipientClabe.substring(0, 3);
       const senderFullName = `${sender.given_name} ${sender.family_name}`;
 
+      // For external transfers, call SPEI service
+      if (!isInternalTransfer) {
+        const outboundPayload = {
+          claveRastreo,
+          conceptoPago: concept,
+          cuentaOrdenante: sender.clabe!,
+          cuentaBeneficiario: recipientClabe,
+          empresa: "CEDI",
+          institucionContraparte: getInstitutionCode(recipientBankCode),
+          institucionOperante: "90646",
+          monto: amount,
+          nombreBeneficiario: recipientName,
+          nombreOrdenante: senderFullName,
+          referenciaNumerica: Math.floor(100000 + Math.random() * 900000).toString(),
+          rfcCurpBeneficiario: "ND",
+          rfcCurpOrdenante: "ND",
+          tipoCuentaBeneficiario: recipientClabe.length === 16 ? "3" : "40",
+          tipoCuentaOrdenante: "40",
+          tipoPago: "1"
+        };
+
+        speiResponse = await SpeiService.sendTransfer(outboundPayload);
+        
+        if (!speiResponse.success) {
+          throw new Error(speiResponse.error || 'Error en la transferencia SPEI');
+        }
+      }
+
+      // Get commission account for external transfers
+      let commissionAccount = null;
+      if (!isInternalTransfer) {
+        const { data: commissionAccounts } = await supabase
+          .from('users')
+          .select('*')
+          .eq('clabe', COMMISSION_CLABE)
+          .single();
+        
+        commissionAccount = commissionAccounts;
+      }
+
+      // Update balances
       const newSenderBalance = sender.balance! - (amount + appliedCommission);
-      
       const updates = [
         supabaseAdmin
           .from('users')
@@ -332,16 +335,7 @@ export default function ConfirmDepositScreen() {
           .eq('id', currentUser.id)
       ];
 
-      if (recipient) {
-        const newRecipientBalance = (recipient.balance || 0) + amount;
-        updates.push(
-          supabaseAdmin
-            .from('users')
-            .update({ balance: newRecipientBalance })
-            .eq('id', recipient.id)
-        );
-      }
-
+      // Add commission account update if external transfer
       if (!isInternalTransfer && commissionAccount) {
         const newCommissionBalance = (commissionAccount.balance || 0) + appliedCommission;
         updates.push(
@@ -354,7 +348,9 @@ export default function ConfirmDepositScreen() {
 
       await Promise.all(updates);
 
-      await Promise.all([
+      // Create movement records
+      const movements = [
+        // Sender's outbound movement
         db.movements.create({
           user_id: currentUser.id,
           category: isInternalTransfer ? 'INTERNAL' : 'WIRE',
@@ -364,48 +360,37 @@ export default function ConfirmDepositScreen() {
           commission: appliedCommission,
           final_amount: amount + appliedCommission,
           clave_rastreo: claveRastreo,
-          counterparty_clabe: recipientClabe,
           counterparty_name: recipientName,
           counterparty_bank: BANK_CODES[recipientBankCode]?.name || 'Unknown Bank',
+          counterparty_clabe: recipientClabe,
           concept,
-          concept2
-        }),
+          concept2,
+          metadata: isInternalTransfer ? {} : { speiResponse: speiResponse!.data }
+        })
+      ];
 
-        ...(recipient ? [
-          db.movements.create({
-            user_id: recipient.id,
-            category: isInternalTransfer ? 'INTERNAL' : 'WIRE',
-            direction: 'INBOUND',
-            status: 'COMPLETED',
-            amount,
-            commission: 0,
-            final_amount: amount,
-            clave_rastreo: claveRastreo,
-            counterparty_clabe: sender.clabe,
-            counterparty_name: senderFullName,
-            counterparty_bank: 'CEDI',
-            concept,
-            concept2
-          })
-        ] : []),
-
-        ...((!isInternalTransfer && commissionAccount) ? [
+      // Add commission movement for external transfers
+      if (!isInternalTransfer && commissionAccount) {
+        movements.push(
           db.movements.create({
             user_id: commissionAccount.id,
             category: 'INTERNAL',
             direction: 'INBOUND',
             status: 'COMPLETED',
-            amount: appliedCommission,
+            amount: COMMISSION_AMOUNT,
             commission: 0,
-            final_amount: appliedCommission,
+            final_amount: COMMISSION_AMOUNT,
             clave_rastreo: claveRastreo,
-            counterparty_clabe: sender.clabe,
             counterparty_name: senderFullName,
             counterparty_bank: 'CEDI',
-            concept: 'Comisión por transferencia SPEI saliente'
+            counterparty_clabe: sender.clabe,
+            concept: 'Comisión por transferencia SPEI saliente',
+            metadata: isInternalTransfer ? {} : { speiResponse: speiResponse!.data }
           })
-        ] : [])
-      ]);
+        );
+      }
+
+      await Promise.all(movements);
 
       return { newSenderBalance, claveRastreo };
     } catch (error) {

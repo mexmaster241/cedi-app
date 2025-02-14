@@ -1,12 +1,13 @@
-import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '@/app/constants/colors';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 
 interface Movement {
   clave_rastreo: string;
@@ -27,6 +28,7 @@ interface Movement {
 export default function SuccessScreen() {
   const params = useLocalSearchParams<{ movementData: string }>();
   const [movement, setMovement] = useState<Movement | null>(null);
+  const viewRef = useRef(null);
 
   useEffect(() => {
     if (params.movementData) {
@@ -131,16 +133,17 @@ export default function SuccessScreen() {
     if (!movement) return;
 
     try {
-      const html = generatePDFContent();
-      const { uri } = await Print.printToFileAsync({ html });
+      const uri = await captureRef(viewRef, {
+        format: 'png',
+        quality: 0.8,
+      });
       
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Compartir Comprobante',
-        UTI: 'com.adobe.pdf'
+      await Share.share({
+        url: uri,
+        title: 'Comprobante de Transferencia',
       });
     } catch (error) {
-      console.error('Error sharing PDF:', error);
+      console.error('Error sharing image:', error);
     }
   };
 
@@ -183,7 +186,14 @@ export default function SuccessScreen() {
       </View>
 
       <View style={styles.content}>
-        <View style={styles.card}>
+        <View ref={viewRef} style={styles.card}>
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('../../../assets/images/logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
           <Text style={styles.cardTitle}>Comprobante de Transferencia</Text>
           <Text style={styles.reference}>#{movement?.clave_rastreo}</Text>
 
@@ -249,8 +259,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     width: 120,
-    height: 120,
-    marginBottom: 30,
+    height: 40,
   },
   loadingText: {
     fontFamily: 'ClashDisplay',

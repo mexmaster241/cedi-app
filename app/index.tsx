@@ -1,4 +1,4 @@
-import { Text, View, FlatList, StyleSheet } from "react-native";
+import { Text, View, FlatList, StyleSheet, RefreshControl } from "react-native";
 import { useFonts } from 'expo-font';
 import React from 'react';
 import * as SplashScreen from 'expo-splash-screen';
@@ -28,6 +28,7 @@ interface Movement {
 SplashScreen.preventAutoHideAsync();
 
 export default function Index() {
+  const [refreshing, setRefreshing] = useState(false);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fontsLoaded] = useFonts({
@@ -48,7 +49,7 @@ export default function Index() {
         setMovements(sortedMovements.slice(0, 20));
         setIsLoading(false);
       } catch (err) {
-        console.error('Error fetching movements:', err);
+       
         setIsLoading(false);
       }
     };
@@ -61,6 +62,25 @@ export default function Index() {
       await SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const currentUser = await getCurrentUser();
+      if (!currentUser?.id) return;
+      
+      const userMovements = await db.movements.list(currentUser.id);
+      const sortedMovements = userMovements.sort((a, b) => {
+        return new Date(b?.createdAt ?? 0).getTime() - 
+               new Date(a?.createdAt ?? 0).getTime();
+      });
+      setMovements(sortedMovements.slice(0, 20));
+    } catch (err) {
+      // Handle error if needed
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   if (!fontsLoaded) return null;
 
@@ -138,6 +158,23 @@ export default function Index() {
     );
   };
 
+  const renderSkeletons = () => {
+    return Array(5).fill(0).map((_, index) => (
+      <View key={index} style={styles.transaction}>
+        <View style={styles.leftContent}>
+          <View style={styles.iconContainer}>
+            <Skeleton width={24} height={24} />
+          </View>
+          <View style={styles.transactionInfo}>
+            <Skeleton width={200} height={16} />
+            <Skeleton width={150} height={14} />
+          </View>
+        </View>
+        <Skeleton width={80} height={16} />
+      </View>
+    ));
+  };
+
   return (
     <View
       style={{
@@ -148,6 +185,13 @@ export default function Index() {
     >
       <TopBar />
       <FlatList
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.black}
+          />
+        }
         ListHeaderComponent={
           <View style={{ alignItems: 'center', width: '100%' }}>
             <Header />
@@ -155,8 +199,9 @@ export default function Index() {
             <Text style={[styles.title, { alignSelf: 'center' }]}>Transacciones recientes</Text>
           </View>
         }
-        data={movements}
+        data={isLoading ? [] : movements}
         renderItem={renderMovement}
+        ListEmptyComponent={isLoading ? renderSkeletons : null}
         keyExtractor={item => item.id}
         contentContainerStyle={{
           paddingHorizontal: 20,
