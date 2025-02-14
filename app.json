@@ -1,17 +1,25 @@
 {
   "expo": {
-    "name": "cedi-app",
+    "name": "cedi",
     "slug": "cedi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "cedi",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
+      "bundleIdentifier": "com.soycedi.cedi",
+      "buildNumber": "1",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.soycedi.cedi",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
