@@ -307,9 +307,12 @@ export default function ConfirmDepositScreen() {
           tipoPago: "1"
         };
 
+        console.log('Sending SPEI payload:', outboundPayload);
         speiResponse = await SpeiService.sendTransfer(outboundPayload);
+        console.log('SPEI response:', speiResponse);
         
         if (!speiResponse.success) {
+          console.error('SPEI error:', speiResponse.error);
           throw new Error(speiResponse.error || 'Error en la transferencia SPEI');
         }
       }
