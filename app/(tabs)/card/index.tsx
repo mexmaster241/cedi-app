@@ -69,7 +69,7 @@ export default function Card() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity 
-            onPress={() => router.push("/")}
+            onPress={() => router.back()}
             style={styles.backButton}
           >
             <Feather name="arrow-left" size={24} color={colors.black} />

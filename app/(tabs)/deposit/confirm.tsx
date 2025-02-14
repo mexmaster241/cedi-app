@@ -485,10 +485,7 @@ export default function ConfirmDepositScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity 
-            onPress={() => {
-              router.back();
-              router.push('/');
-            }}
+            onPress={() => router.back()}
             style={styles.backButton}
           >
             <Feather name="arrow-left" size={24} color={colors.black} />

@@ -68,7 +68,7 @@ export default function SelectRecipientScreen() {
         amount,
         commission,
         recipientId: contact.id,
-        recipientName: contact.alias || contact.name,
+        recipientName: contact.name,
         accountNumber: contact.clabe || contact.card || contact.phone,
       },
     });

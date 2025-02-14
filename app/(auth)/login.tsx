@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -6,12 +6,51 @@ import { colors } from '../constants/colors';
 import { supabase } from '@/app/src/db';
 import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { Platform } from 'react-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [savedCredentials, setSavedCredentials] = useState<{email: string, password: string} | null>(null);
+
+  useEffect(() => {
+    checkBiometricSupport();
+    // You would typically load saved credentials from secure storage here
+    // This is just a placeholder - implement secure storage in production
+    setSavedCredentials({
+      email: '', // stored email
+      password: '' // stored password
+    });
+  }, []);
+
+  const checkBiometricSupport = async () => {
+    const compatible = await LocalAuthentication.hasHardwareAsync();
+    setIsBiometricSupported(compatible);
+  };
+
+  const handleBiometricAuth = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Autenticación biométrica',
+        fallbackLabel: 'Usar contraseña',
+        cancelLabel: 'Cancelar',
+      });
+
+      if (result.success && savedCredentials) {
+        // Auto-fill credentials and login
+        setEmail(savedCredentials.email);
+        setPassword(savedCredentials.password);
+        handleLogin();
+      }
+    } catch (error) {
+      console.error('Biometric error:', error);
+      setErrorMessage('Error en autenticación biométrica');
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -103,6 +142,20 @@ export default function LoginScreen() {
           </View>
         </View>
 
+        {isBiometricSupported && (
+          <TouchableOpacity 
+            style={styles.biometricButton}
+            onPress={handleBiometricAuth}
+          >
+            <Ionicons 
+              name={Platform.OS === 'ios' ? 'finger-print' : 'finger-print'} 
+              size={24} 
+              color={colors.black} 
+            />
+            <Text style={styles.biometricText}>Usar biometría</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.signupContainer}>
           <Text style={styles.signupText}>¿No tienes cuenta? </Text>
           <TouchableOpacity onPress={() => router.push('https://main.d3n362okhpkge4.amplifyapp.com/sign-up')}>
@@ -160,6 +213,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'ClashDisplay',
     color: colors.black,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   buttonContainer: {
     width: '100%',
@@ -205,5 +268,20 @@ const styles = StyleSheet.create({
     right: 12,
     top: '50%',
     transform: [{ translateY: -12 }],
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.white,
+  },
+  biometricText: {
+    marginLeft: 8,
+    fontFamily: 'ClashDisplay',
+    fontSize: 14,
+    color: colors.black,
   },
 });

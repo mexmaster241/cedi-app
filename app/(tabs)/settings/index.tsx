@@ -19,11 +19,15 @@ export default function UserPage() {
   };
 
   const options = [
-    { icon: 'user', label: 'Perfil', onPress: () => {} },
-    { icon: 'settings', label: 'Settings', onPress: () => {} },
-    { icon: 'file-text', label: 'Estados de cuenta', onPress: () => {} },
-    { icon: 'shield', label: 'Seguridad', onPress: () => {} },
-    { icon: 'help-circle', label: 'Help', onPress: () => {} },
+    { 
+      icon: 'user', 
+      label: 'Perfil', 
+      onPress: () => router.push('/profile')
+    },
+    // { icon: 'settings', label: 'Settings', onPress: () => {} },
+    // { icon: 'file-text', label: 'Estados de cuenta', onPress: () => {} },
+    // { icon: 'shield', label: 'Seguridad', onPress: () => {} },
+    // { icon: 'help-circle', label: 'Help', onPress: () => {} },
     { icon: 'log-out', label: 'Cerrar sesión', onPress: handleLogout },
   ];
 

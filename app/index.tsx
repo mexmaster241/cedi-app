@@ -71,28 +71,66 @@ export default function Index() {
       month: 'short'
     }).toUpperCase();
 
+    // Get status text in Spanish
+    const getStatusText = (status: string) => {
+      switch (status.toUpperCase()) {
+        case 'REVERSED':
+          return 'devuelta';
+        case 'COMPLETED':
+          return 'completada';
+        default:
+          return 'pendiente';
+      }
+    };
+
+    // Get status color and icon based on status
+    const getStatusColor = (status: string) => {
+      switch (status.toUpperCase()) {
+        case 'REVERSED':
+          return colors.darkGray;
+        case 'COMPLETED':
+          return item.direction === 'INBOUND' ? '#22c55e' : colors.black;
+        default:
+          return colors.darkGray;
+      }
+    };
+
+    const getStatusIcon = (status: string) => {
+      switch (status.toUpperCase()) {
+        case 'REVERSED':
+          return 'rotate-ccw';
+        case 'COMPLETED':
+          return item.direction === 'INBOUND' ? 'arrow-down-left' : 'arrow-up-right';
+        default:
+          return 'clock';
+      }
+    };
+
     return (
       <View style={styles.transaction}>
         <View style={styles.leftContent}>
           <View style={styles.iconContainer}>
             <Feather 
-              name={item.direction === 'INBOUND' ? 'arrow-down-left' : 'arrow-up-right'} 
+              name={getStatusIcon(item.status)} 
               size={24} 
-              color={item.direction === 'INBOUND' ? '#22c55e' : colors.black}
+              color={getStatusColor(item.status)}
             />
           </View>
           <View style={styles.transactionInfo}>
-            <Text style={styles.transactionTitle}>
+            <Text style={styles.transactionTitle} numberOfLines={1}>
               {item.direction === 'INBOUND' ? 'Transferencia recibida' : 'Transferencia enviada'}
             </Text>
-            <Text style={styles.date}>{formattedDate}</Text>
+            <Text style={styles.date}>
+              {formattedDate} • {getStatusText(item.status)}
+            </Text>
           </View>
         </View>
         <Text 
           style={[
             styles.amount, 
-            { color: item.direction === 'INBOUND' ? '#22c55e' : colors.black }
+            { color: getStatusColor(item.status) }
           ]}
+          numberOfLines={1}
         >
           {item.direction === 'OUTBOUND' ? '-' : ''}${Math.abs(item.final_amount).toFixed(2)}
         </Text>
@@ -144,6 +182,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingRight: 4,
     borderBottomWidth: 1,
     borderBottomColor: colors.lightGray,
     width: '100%',
@@ -151,6 +190,8 @@ const styles = StyleSheet.create({
   leftContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
   },
   iconContainer: {
     width: 40,
@@ -163,6 +204,7 @@ const styles = StyleSheet.create({
   },
   transactionInfo: {
     flex: 1,
+    marginRight: 8,
   },
   transactionTitle: {
     fontFamily: 'ClashDisplay',
@@ -179,7 +221,8 @@ const styles = StyleSheet.create({
     fontFamily: 'ClashDisplay',
     fontSize: 16,
     textAlign: 'right',
-    minWidth: 80,
+    minWidth: 90,
+    flexShrink: 0,
   }
 });
 
