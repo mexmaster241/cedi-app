@@ -1,4 +1,4 @@
-import { Text, View, FlatList, StyleSheet, RefreshControl } from "react-native";
+import { Text, View, FlatList, StyleSheet, RefreshControl, TouchableOpacity } from "react-native";
 import { useFonts } from 'expo-font';
 import React from 'react';
 import * as SplashScreen from 'expo-splash-screen';
@@ -22,6 +22,7 @@ interface Movement {
   counterparty_name: string;
   concept?: string;
   created_at?: string;
+  clave_rastreo: string;
 }
 
 // Keep the splash screen visible while we fetch resources
@@ -127,7 +128,13 @@ export default function Index() {
     };
 
     return (
-      <View style={styles.transaction}>
+      <TouchableOpacity 
+        style={styles.transaction}
+        onPress={() => router.push({
+          pathname: "/(tabs)/transaction",
+          params: { movementId: item.clave_rastreo }
+        })}
+      >
         <View style={styles.leftContent}>
           <View style={styles.iconContainer}>
             <Feather 
@@ -154,7 +161,7 @@ export default function Index() {
         >
           {item.direction === 'OUTBOUND' ? '-' : ''}${Math.abs(item.final_amount).toFixed(2)}
         </Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 
