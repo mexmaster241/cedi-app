@@ -20,9 +20,10 @@ interface Contact {
 }
 
 export default function SelectRecipientScreen() {
-  const { amount, commission } = useLocalSearchParams<{ amount: string, commission: string }>();
+  const { amount } = useLocalSearchParams<{ amount: string }>();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userCommission, setUserCommission] = useState(5.80); // Default fallback
 
   useEffect(() => {
     let isMounted = true;
@@ -57,7 +58,22 @@ export default function SelectRecipientScreen() {
       }
     }
 
+    // Add useEffect to fetch user's commission
+    async function fetchUserCommission() {
+      try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.id) return;
+
+        const userData = await db.users.get(currentUser.id);
+        // Get outbound commission from user data
+        setUserCommission(userData?.outbound_commission_fixed ?? 5.80);
+      } catch (err) {
+        console.error("Error fetching user commission:", err);
+      }
+    }
+
     fetchContacts();
+    fetchUserCommission();
     return () => { isMounted = false; };
   }, []);
 
@@ -66,7 +82,6 @@ export default function SelectRecipientScreen() {
       pathname: '/deposit/confirm',
       params: {
         amount,
-        commission,
         recipientId: contact.id,
         recipientName: contact.name,
         accountNumber: contact.clabe || contact.card || contact.phone,
@@ -77,7 +92,7 @@ export default function SelectRecipientScreen() {
   const handleNewRecipient = () => {
     router.push({
       pathname: '/deposit/new',
-      params: { amount, commission }
+      params: { amount }
     });
   };
 

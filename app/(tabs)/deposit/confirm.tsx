@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/app/constants/colors';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import Toast from 'react-native-toast-message';
@@ -249,10 +249,28 @@ export default function ConfirmDepositScreen() {
   const [concept, setConcept] = useState('');
   const [concept2, setConcept2] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [userCommission, setUserCommission] = useState(5.80); // Default fallback
 
-  // Add state for commission visibility
+  // Add useEffect to fetch user's commission
+  useEffect(() => {
+    async function fetchUserCommission() {
+      try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser?.id) return;
+
+        const userData = await db.users.get(currentUser.id);
+        // Get outbound commission from user data
+        setUserCommission(userData?.outbound_commission_fixed ?? 5.80);
+      } catch (err) {
+        console.error("Error fetching user commission:", err);
+      }
+    }
+    fetchUserCommission();
+  }, []);
+
+  // Update commission logic to use dynamic user commission
   const isInternalTransfer = accountNumber?.startsWith('6461805278');
-  const appliedCommission = isInternalTransfer ? 0 : COMMISSION_AMOUNT;
+  const appliedCommission = isInternalTransfer ? 0 : userCommission;
   const totalAmount = Number(amount) + appliedCommission;
 
   const handleTransfer = async (
@@ -275,7 +293,7 @@ export default function ConfirmDepositScreen() {
       }
 
       const isInternalTransfer = recipientClabe.startsWith('6461805278');
-      const appliedCommission = isInternalTransfer ? 0 : COMMISSION_AMOUNT;
+      const appliedCommission = isInternalTransfer ? 0 : userCommission;
 
       if (sender.balance! < (amount + appliedCommission)) {
         throw new Error('Insufficient funds');
@@ -380,9 +398,9 @@ export default function ConfirmDepositScreen() {
             category: 'INTERNAL',
             direction: 'INBOUND',
             status: 'COMPLETED',
-            amount: COMMISSION_AMOUNT,
+            amount: userCommission,
             commission: 0,
-            final_amount: COMMISSION_AMOUNT,
+            final_amount: userCommission,
             clave_rastreo: claveRastreo,
             counterparty_name: senderFullName,
             counterparty_bank: 'CEDI',
@@ -495,7 +513,7 @@ export default function ConfirmDepositScreen() {
             {!isInternalTransfer && (
               <>
                 <Text style={styles.label}>Comisión:</Text>
-                <Text style={styles.value}>${COMMISSION_AMOUNT.toFixed(2)}</Text>
+                <Text style={styles.value}>${userCommission.toFixed(2)}</Text>
               </>
             )}
 
