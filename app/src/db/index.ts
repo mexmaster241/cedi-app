@@ -1,20 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jxolxswcizkctuoskvfn.supabase.co'
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4b2x4c3djaXprY3R1b3NrdmZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4OTYxOTIsImV4cCI6MjA1NDQ3MjE5Mn0.qQahjgRB0e5dTj0NH5trDDQ3yNfmcCigjH3yhDTulB4'
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
 
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jxolxswcizkctuoskvfn.supabase.co'
+// const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4b2x4c3djaXprY3R1b3NrdmZuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODg5NjE5MiwiZXhwIjoyMDU0NDcyMTkyfQ.D0AwIVvebL_QUaHsRoSjEuAoQ8Ff5-dacBJ7E4v8PhI'
+
+// Strict validation of required environment variables
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables')
+  throw new Error('Missing required Supabase configuration. Please check your environment variables.')
 }
 
 // Create regular client for normal operations
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
 // Create service role client for privileged operations
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4b2x4c3djaXprY3R1b3NrdmZuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODg5NjE5MiwiZXhwIjoyMDU0NDcyMTkyfQ.D0AwIVvebL_QUaHsRoSjEuAoQ8Ff5-dacBJ7E4v8PhI'
 
 if (!serviceRoleKey) {
-  throw new Error('Missing Supabase service role key')
+  throw new Error('Missing Supabase service role key configuration')
 }
 
 export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
@@ -51,6 +55,7 @@ export interface Movement {
   counterparty_name: string
   counterparty_bank: string
   counterparty_clabe?: string
+  counterparty_card?: string
   counterparty_email?: string
   concept?: string
   concept2?: string
@@ -65,6 +70,7 @@ export interface Contact {
   clabe: string
   alias?: string
   email?: string
+  card?: string
 }
 
 export interface PersonaMoral {

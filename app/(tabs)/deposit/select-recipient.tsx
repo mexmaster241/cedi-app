@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import { Skeleton } from '@/app/components/Skeleton';
 import React from 'react';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { deleteContact } from '@/app/constants/contacts';
 
 interface Contact {
   id: string;
@@ -25,36 +27,38 @@ export default function SelectRecipientScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [userCommission, setUserCommission] = useState(5.80); // Default fallback
 
+  const fetchContacts = async () => {
+    try {
+      const currentUser = await getCurrentUser();
+      const userEmail = currentUser?.email;
+      
+      if (!userEmail) {
+        throw new Error('No email found for user');
+      }
+
+      // Get user ID first
+      const userId = await db.users.getUserId(userEmail);
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+
+      // Fetch contacts using userId
+      const userContacts = await db.contacts.list(userId);
+      setContacts(userContacts as Contact[]);
+    } catch (err) {
+      console.error('Error fetching contacts:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchContacts() {
-      try {
-        const currentUser = await getCurrentUser();
-        const userEmail = currentUser?.email;
-        
-        if (!userEmail) {
-          throw new Error('No email found for user');
-        }
-
-        // Get user ID first
-        const userId = await db.users.getUserId(userEmail);
-        if (!userId) {
-          throw new Error('User ID not found');
-        }
-
-        // Fetch contacts using userId
-        const userContacts = await db.contacts.list(userId);
-        
-        if (isMounted) {
-          setContacts(userContacts as Contact[]);
-        }
-      } catch (err) {
-        console.error('Error fetching contacts:', err);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+    async function initialize() {
+      if (isMounted) {
+        await fetchContacts();
+        await fetchUserCommission();
       }
     }
 
@@ -72,10 +76,59 @@ export default function SelectRecipientScreen() {
       }
     }
 
-    fetchContacts();
-    fetchUserCommission();
+    initialize();
     return () => { isMounted = false; };
   }, []);
+
+  const handleDeleteContact = async (contactId: string) => {
+    try {
+      const currentUser = await getCurrentUser();
+      if (!currentUser?.id) {
+        throw new Error('No authenticated user');
+      }
+
+      const result = await deleteContact(contactId, currentUser.id);
+      
+      if (result.success) {
+        // Update the local state to remove the deleted contact
+        setContacts(prevContacts => prevContacts.filter(c => c.id !== contactId));
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Error al eliminar el contacto'
+      );
+    }
+  };
+
+  const renderRightActions = (contactId: string) => {
+    return (
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={() => {
+          Alert.alert(
+            'Eliminar contacto',
+            '¿Estás seguro que deseas eliminar este contacto?',
+            [
+              {
+                text: 'Cancelar',
+                style: 'cancel',
+              },
+              {
+                text: 'Eliminar',
+                style: 'destructive',
+                onPress: () => handleDeleteContact(contactId),
+              },
+            ]
+          );
+        }}
+      >
+        <Feather name="trash-2" size={24} color={colors.white} />
+      </TouchableOpacity>
+    );
+  };
 
   const handleRecipientSelect = (contact: Contact) => {
     router.push({
@@ -103,8 +156,35 @@ export default function SelectRecipientScreen() {
     return '';
   };
 
+  const renderItem = ({ item }: { item: Contact }) => (
+    <Swipeable
+      renderRightActions={() => renderRightActions(item.id)}
+      overshootRight={false}
+    >
+      <TouchableOpacity 
+        style={styles.recipientItem}
+        onPress={() => handleRecipientSelect(item)}
+      >
+        <View style={styles.avatarContainer}>
+          <Text style={styles.avatarText}>
+            {(item.alias || item.name).charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.recipientInfo}>
+          <Text style={styles.recipientName}>
+            {item.alias || item.name}
+          </Text>
+          <Text style={styles.accountNumber}>
+            {getAccountPreview(item)}
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={24} color={colors.lightGray} />
+      </TouchableOpacity>
+    </Swipeable>
+  );
+
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="dark" translucent backgroundColor="transparent" />
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -148,27 +228,7 @@ export default function SelectRecipientScreen() {
             <FlatList
               data={contacts}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.recipientItem}
-                  onPress={() => handleRecipientSelect(item)}
-                >
-                  <View style={styles.avatarContainer}>
-                    <Text style={styles.avatarText}>
-                      {(item.alias || item.name).charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.recipientInfo}>
-                    <Text style={styles.recipientName}>
-                      {item.alias || item.name}
-                    </Text>
-                    <Text style={styles.accountNumber}>
-                      {getAccountPreview(item)}
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={24} color={colors.lightGray} />
-                </TouchableOpacity>
-              )}
+              renderItem={renderItem}
             />
           ) : (
             <Text style={styles.emptyText}>
@@ -177,7 +237,7 @@ export default function SelectRecipientScreen() {
           )}
         </View>
       </SafeAreaView>
-    </>
+    </GestureHandlerRootView>
   );
 }
 
@@ -239,6 +299,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.beige,
+    backgroundColor: colors.white,
   },
   avatarContainer: {
     width: 40,
@@ -273,5 +334,12 @@ const styles = StyleSheet.create({
     color: colors.darkGray,
     textAlign: 'center',
     marginTop: 24,
+  },
+  deleteButton: {
+    backgroundColor: colors.red,
+    width: 80,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

@@ -8,6 +8,8 @@ import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
+import Toast from 'react-native-toast-message';
+import { Feather } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -83,19 +85,28 @@ export default function LoginScreen() {
     } catch (error: any) {
       console.error('Login error:', error);
       
+      let errorTitle = 'Error';
+      let errorMessage = 'Hubo un error inesperado. Por favor intenta de nuevo.';
+      
       switch(error.message) {
         case 'Email not confirmed':
-          setErrorMessage('Por favor verifica tu cuenta de email');
+          errorMessage = 'Por favor verifica tu cuenta de email';
           break;
         case 'Invalid login credentials':
-          setErrorMessage('Email o contraseña incorrectos');
+          errorMessage = 'Email o contraseña incorrectos';
           break;
         case 'User not found':
-          setErrorMessage('No existe una cuenta con este email');
+          errorMessage = 'No existe una cuenta con este email';
           break;
-        default:
-          setErrorMessage('Hubo un error inesperado. Por favor intenta de nuevo.');
       }
+      
+      Toast.show({
+        type: 'error',
+        text1: errorTitle,
+        text2: errorMessage,
+        position: 'bottom',
+        visibilityTime: 3000,
+      });
     }
   };
 
@@ -172,6 +183,22 @@ export default function LoginScreen() {
           <Text style={styles.buttonText}>Ingresa</Text>
         </TouchableOpacity>
       </View>
+
+      <Toast 
+        config={{
+          error: (props) => (
+            <View style={toastStyles.container}>
+              <View style={toastStyles.iconContainer}>
+                <Feather name="alert-circle" size={24} color={colors.black} />
+              </View>
+              <View style={toastStyles.textContainer}>
+                <Text style={toastStyles.title}>{props.text1}</Text>
+                <Text style={toastStyles.message}>{props.text2}</Text>
+              </View>
+            </View>
+          )
+        }}
+      />
     </LinearGradient>
   );
 }
@@ -283,5 +310,48 @@ const styles = StyleSheet.create({
     fontFamily: 'ClashDisplay',
     fontSize: 14,
     color: colors.black,
+  },
+});
+
+const toastStyles = StyleSheet.create({
+  container: {
+    width: '90%',
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginBottom: 16,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.beige,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  title: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    color: colors.black,
+    marginBottom: 4,
+  },
+  message: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 14,
+    color: colors.darkGray,
   },
 });
