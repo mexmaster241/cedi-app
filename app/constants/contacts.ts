@@ -1,5 +1,3 @@
-
-
 import { db, supabaseAdmin } from '../src/db'
 import { getCurrentSession } from '../src/db'
 

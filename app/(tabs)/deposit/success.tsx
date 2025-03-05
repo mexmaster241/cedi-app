@@ -20,6 +20,7 @@ interface Movement {
   finalAmount: number;
   counterpartyBank: string;
   counterpartyClabe: string;
+  counterpartyCard: string;
   concept?: string;
   concept2?: string;
   status: string;
@@ -45,6 +46,7 @@ export default function SuccessScreen() {
           finalAmount: Number(parsedMovement.amount) + Number(parsedMovement.commission),
           counterpartyBank: parsedMovement.counterpartyBank,
           counterpartyClabe: parsedMovement.counterpartyClabe,
+          counterpartyCard: parsedMovement.counterpartyCard,
           concept: parsedMovement.concept,
           concept2: parsedMovement.concept2,
           status: parsedMovement.status || 'COMPLETED'
