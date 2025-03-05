@@ -46,25 +46,29 @@ export async function createTransfer(formData: FormData): Promise<TransferResult
     let institutionCode: string
 
     if (accountType === 'tarjeta') {
-      // Get the selected institution from the form
-      const selectedInstitution = formData.get('institution') as string
+      const selectedInstitution = formData.get('institucionContraparte') as string;
       if (!selectedInstitution) {
-        throw new Error('Debe seleccionar un banco para transferencias a tarjeta')
+        throw new Error('Debe seleccionar un banco para transferencias a tarjeta');
       }
-      bankCode = selectedInstitution
-      bankName = BANK_CODES[bankCode]?.name || 'Unknown Bank'
-      institutionCode = BANK_TO_INSTITUTION[bankCode] || "90646"
+      
+      // Find the bank code by matching the institution code
+      const bankCodeEntry = Object.entries(BANK_TO_INSTITUTION).find(
+        ([_, instCode]) => instCode === selectedInstitution
+      );
+      
+      if (bankCodeEntry) {
+        bankCode = bankCodeEntry[0];
+        bankName = BANK_CODES[bankCode]?.name || 'Unknown Bank';
+        institutionCode = selectedInstitution;
+      } else {
+        throw new Error('Invalid institution code');
+      }
     } else {
       // For CLABE, get bank from first 3 digits
       bankCode = recipientAccount.substring(0, 3)
       bankName = BANK_CODES[bankCode]?.name || 'Unknown Bank'
       institutionCode = BANK_TO_INSTITUTION[bankCode] || "90646"
     }
-
-    console.log('Account Type:', accountType)
-    console.log('Bank Code:', bankCode)
-    console.log('Bank Name:', bankName)
-    console.log('Institution Code:', institutionCode)
 
     const isInternalTransfer = recipientAccount.startsWith('6461805278')
     const appliedCommission = isInternalTransfer ? 0 : (senderData.outbound_commission_fixed ?? 5.80)
@@ -130,15 +134,11 @@ export async function createTransfer(formData: FormData): Promise<TransferResult
         tipoPago: "1"
       }
 
-      console.log('Sending SPEI transfer:', outboundPayload)
-
       speiResponse = await SpeiService.sendTransfer(outboundPayload)
       
       if (!speiResponse.success) {
         throw new Error(speiResponse.error || 'SPEI transfer failed')
       }
-
-      console.log('SPEI Response:', speiResponse)
     }
 
     // Create all movements array

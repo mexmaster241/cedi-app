@@ -11,6 +11,8 @@ import { Skeleton } from '@/app/components/Skeleton';
 import React from 'react';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { deleteContact } from '@/app/constants/contacts';
+import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
+
 
 interface Contact {
   id: string;
@@ -19,6 +21,7 @@ interface Contact {
   clabe?: string;
   card?: string;
   phone?: string;
+  bank?: string;
 }
 
 export default function SelectRecipientScreen() {
@@ -131,6 +134,26 @@ export default function SelectRecipientScreen() {
   };
 
   const handleRecipientSelect = (contact: Contact) => {
+    // Determine account type and bank info
+    const accountType = contact.clabe ? 'clabe' : contact.card ? 'tarjeta' : 'phone';
+    let bankCode, bankName, institutionCode;
+
+    if (accountType === 'clabe' && contact.clabe) {
+      // For CLABE, get bank from first 3 digits
+      bankCode = contact.clabe.substring(0, 3);
+      bankName = BANK_CODES[bankCode]?.name || 'Unknown Bank';
+      institutionCode = BANK_TO_INSTITUTION[bankCode] || '90646';
+    } else if (accountType === 'tarjeta' && contact.card) {
+      // For cards, we need to get the bank from the contact's bank field
+      // You might need to reverse lookup the bank code from the bank name
+      const bankEntry = Object.entries(BANK_CODES).find(([_, bank]) => bank.name === contact.bank);
+      if (bankEntry) {
+        bankCode = bankEntry[0];
+        bankName = contact.bank;
+        institutionCode = BANK_TO_INSTITUTION[bankCode] || '90646';
+      }
+    }
+
     router.push({
       pathname: '/deposit/confirm',
       params: {
@@ -138,6 +161,10 @@ export default function SelectRecipientScreen() {
         recipientId: contact.id,
         recipientName: contact.name,
         accountNumber: contact.clabe || contact.card || contact.phone,
+        accountType,
+        bankCode,
+        bankName,
+        institutionCode
       },
     });
   };

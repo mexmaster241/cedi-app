@@ -67,10 +67,10 @@ export interface Contact {
   user_id: string
   name: string
   bank: string
-  clabe: string
+  clabe: string | null
   alias?: string
   email?: string
-  card?: string
+  card?: string | null
 }
 
 export interface PersonaMoral {
