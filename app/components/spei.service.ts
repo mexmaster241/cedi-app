@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
-//const SPEI_API_BASE_URL = process.env.SPEI_API_URL || 'https://backend.soycedi.com/api/spt/';
-const SPEI_API_BASE_URL = 'http://localhost:3001/api/spt/';
+const SPEI_API_BASE_URL = process.env.SPEI_API_URL || 'https://backend.soycedi.com/api/spt/';
+//const SPEI_API_BASE_URL = 'http://localhost:3001/api/spt/';
 
 export interface SpeiTransferPayload {
   claveRastreo: string;
