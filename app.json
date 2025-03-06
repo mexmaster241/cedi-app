@@ -17,7 +17,8 @@
       "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -26,7 +27,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "useNextNotificationsApi": true
     },
     "web": {
       "bundler": "metro",
@@ -51,6 +53,14 @@
             "assets/fonts/ClashDisplay-Regular.otf"
           ]
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": ["./assets/sounds/notification.wav"]
+        }
       ]
     ],
     "experiments": {
@@ -61,7 +71,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "9e40d20b-11da-4d96-babc-e6e69ba2df84"
+        "projectId": "90a7579b-5a8d-4191-8bba-bc4f00537579"
       }
     },
     "owner": "cedi0s"
