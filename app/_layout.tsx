@@ -1,9 +1,10 @@
 import { Slot, Stack } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/app/src/db';
+import { registerForPushNotificationsAsync, savePushToken, setupNotificationListeners } from './src/services/notifications';
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -17,6 +18,9 @@ export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     'ClashDisplay': require('../assets/fonts/ClashDisplay-Regular.otf'),
   });
+
+  // Add state for push token
+  const [expoPushToken, setExpoPushToken] = useState('');
 
   useEffect(() => {
     async function init() {
@@ -79,6 +83,26 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, isAuthChecking]);
 
+  useEffect(() => {
+    // Register for push notifications
+    registerForPushNotificationsAsync().then(token => {
+      if (token) {
+        setExpoPushToken(token.data);
+        savePushToken(token.data);
+      }
+    });
+
+    // Setup notification listeners
+    const unsubscribe = setupNotificationListeners(notification => {
+      console.log('Notification received:', notification);
+      // Handle notification in the foreground
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   return (
     <Stack 
       screenOptions={{ 
@@ -92,3 +116,4 @@ export default function RootLayout() {
     </Stack>
   );
 }
+

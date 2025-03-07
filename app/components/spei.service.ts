@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
 
-const SPEI_API_BASE_URL = process.env.SPEI_API_URL 
+const SPEI_API_BASE_URL = process.env.EXPO_PUBLIC_SPEI_API_URL || process.env.SPEI_API_URL 
 //const SPEI_API_BASE_URL = 'http://localhost:3001/api/spt/';
 
 export interface SpeiTransferPayload {

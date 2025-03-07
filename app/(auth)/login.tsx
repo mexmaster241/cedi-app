@@ -10,6 +10,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Feather } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -21,12 +22,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     checkBiometricSupport();
-    // You would typically load saved credentials from secure storage here
-    // This is just a placeholder - implement secure storage in production
-    setSavedCredentials({
-      email: '', // stored email
-      password: '' // stored password
-    });
+    loadSavedCredentials();
   }, []);
 
   const checkBiometricSupport = async () => {
@@ -34,19 +30,77 @@ export default function LoginScreen() {
     setIsBiometricSupported(compatible);
   };
 
+  const loadSavedCredentials = async () => {
+    try {
+      const storedCredentials = await SecureStore.getItemAsync('userCredentials');
+      if (storedCredentials) {
+        setSavedCredentials(JSON.parse(storedCredentials));
+      }
+    } catch (error) {
+      console.error('Error loading credentials:', error);
+    }
+  };
+
+  const saveCredentials = async (email: string, password: string) => {
+    try {
+      const credentials = JSON.stringify({ email, password });
+      await SecureStore.setItemAsync('userCredentials', credentials);
+    } catch (error) {
+      console.error('Error saving credentials:', error);
+    }
+  };
+
   const handleBiometricAuth = async () => {
     try {
+      // First check if we have stored credentials
+      const storedCredentials = await SecureStore.getItemAsync('userCredentials');
+      
+      // Perform biometric authentication
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Autenticación biométrica',
         fallbackLabel: 'Usar contraseña',
         cancelLabel: 'Cancelar',
       });
 
-      if (result.success && savedCredentials) {
-        // Auto-fill credentials and login
-        setEmail(savedCredentials.email);
-        setPassword(savedCredentials.password);
-        handleLogin();
+      if (result.success) {
+        // If we have stored credentials, use them
+        if (storedCredentials) {
+          const savedCredentials = JSON.parse(storedCredentials);
+          try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+              email: savedCredentials.email.trim().toLowerCase(),
+              password: savedCredentials.password
+            });
+            
+            if (error) throw error;
+            
+            if (data.user) {
+              router.replace('/');
+            }
+          } catch (error: any) {
+            console.error('Biometric login error:', error);
+            Toast.show({
+              type: 'error',
+              text1: 'Error de inicio de sesión',
+              text2: 'No se pudo iniciar sesión con biometría. Intenta con tu correo y contraseña.',
+              position: 'bottom',
+              visibilityTime: 3000,
+            });
+          }
+        } else {
+          // No credentials stored - prompt for email to associate with this device's Face ID
+          // Show a modal or navigate to a special "first-time biometric" screen
+          Toast.show({
+            type: 'info',
+            text1: 'Configuración necesaria',
+            text2: 'Para usar Face ID, primero inicia sesión manualmente una vez.',
+            position: 'bottom',
+            visibilityTime: 4000,
+          });
+          
+          // Optional: You could set a flag to show a special instruction
+          // setShowBiometricOnboarding(true);
+        }
       }
     } catch (error) {
       console.error('Biometric error:', error);
@@ -79,7 +133,17 @@ export default function LoginScreen() {
       if (error) throw error;
       
       if (data.user) {
-        router.push('/');
+        // Store credentials before navigation
+        try {
+          await saveCredentials(trimmedEmail, password);
+        } catch (credError) {
+          console.error('Error saving credentials:', credError);
+        }
+        
+        // Use setTimeout to ensure any state updates complete before navigation
+        setTimeout(() => {
+          router.replace('/');
+        }, 100);
       }
       
     } catch (error: any) {
@@ -169,7 +233,7 @@ export default function LoginScreen() {
 
         <View style={styles.signupContainer}>
           <Text style={styles.signupText}>¿No tienes cuenta? </Text>
-          <TouchableOpacity onPress={() => router.push('https://main.d3n362okhpkge4.amplifyapp.com/sign-up')}>
+          <TouchableOpacity onPress={() => router.push('https://soycedi.com/sign-up')}>
             <Text style={styles.signupLink}>Aplica aquí</Text>
           </TouchableOpacity>
         </View>
