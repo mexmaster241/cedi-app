@@ -1,10 +1,9 @@
 import { Slot, Stack } from "expo-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/app/src/db';
-import { registerForPushNotificationsAsync, savePushToken, setupNotificationListeners } from './src/services/notifications';
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -19,9 +18,6 @@ export default function RootLayout() {
     'ClashDisplay': require('../assets/fonts/ClashDisplay-Regular.otf'),
   });
 
-  // Add state for push token
-  const [expoPushToken, setExpoPushToken] = useState('');
-
   useEffect(() => {
     async function init() {
       try {
@@ -34,10 +30,10 @@ export default function RootLayout() {
         }
 
         if (session?.user) {
-          console.log('User authenticated:', session.user.id);
+         
           setIsAuthenticated(true);
         } else {
-          console.log('No session found');
+  
           setIsAuthenticated(false);
         }
       } catch (error) {
@@ -52,7 +48,7 @@ export default function RootLayout() {
     // Add auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
+      
         setIsAuthenticated(!!session);
       }
     );
@@ -66,7 +62,7 @@ export default function RootLayout() {
     if (isAuthChecking) return;
 
     const inAuthGroup = segments[0] === "(auth)";
-    console.log('Current segment:', segments[0], 'inAuthGroup:', inAuthGroup, 'isAuthenticated:', isAuthenticated);
+    
 
     if (!isAuthenticated && !inAuthGroup) {
       console.log('Redirecting to login');
@@ -82,26 +78,6 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, isAuthChecking]);
-
-  useEffect(() => {
-    // Register for push notifications
-    registerForPushNotificationsAsync().then(token => {
-      if (token) {
-        setExpoPushToken(token.data);
-        savePushToken(token.data);
-      }
-    });
-
-    // Setup notification listeners
-    const unsubscribe = setupNotificationListeners(notification => {
-      console.log('Notification received:', notification);
-      // Handle notification in the foreground
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   return (
     <Stack 

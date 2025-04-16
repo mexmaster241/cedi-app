@@ -1,15 +1,19 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '@/app/constants/colors';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import Toast from 'react-native-toast-message';
 import React from 'react';
 import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
+import { createContact } from '@/app/constants/contacts';
+import BottomSheet from '@gorhom/bottom-sheet';
+import Portal from '@gorhom/bottom-sheet';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 type AccountType = 'clabe' | 'tarjeta';
 
@@ -23,6 +27,16 @@ export default function NewRecipient() {
   const [isLoading, setIsLoading] = useState(false);
   const [accountType, setAccountType] = useState<AccountType>('clabe');
   const [showBankModal, setShowBankModal] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  
+  // Bottom sheet reference
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  
+  // Bottom sheet snap points
+  const snapPoints = useMemo(() => ['30%'], []);
+  
+  // For web fallback
+  const isWeb = Platform.OS === 'web';
 
   const handleAccountChange = (text: string) => {
     // Remove any spaces or special characters
@@ -102,9 +116,20 @@ export default function NewRecipient() {
     return true;
   };
 
-  const handleSubmit = async () => {
+  const handleShowConfirmation = () => {
     if (!validateForm()) return;
+    
+    // Open confirmation bottom sheet
+    setShowConfirmation(true);
+    bottomSheetRef.current?.expand();
+  };
+  
+  const handleCancelConfirmation = () => {
+    setShowConfirmation(false);
+    bottomSheetRef.current?.close();
+  };
 
+  const handleSubmit = async () => {
     setIsLoading(true);
     try {
       const currentUser = await getCurrentUser();
@@ -114,20 +139,24 @@ export default function NewRecipient() {
       const bankName = BANK_CODES[bankCode]?.name || 'Unknown Bank';
       const institutionCode = BANK_TO_INSTITUTION[bankCode] || '90646';
 
-      const newContact = await db.contacts.create({
-        user_id: currentUser.id,
-        clabe: accountType === 'clabe' ? account : null,
-        card: accountType === 'tarjeta' ? account : null,
+      const result = await createContact({
         name: name,
-        alias: alias || name,
         bank: bankName,
+        clabe: accountType === 'clabe' ? account : undefined,
+        card: accountType === 'tarjeta' ? account : undefined,
+        alias: alias || name,
+        userId: currentUser.id
       });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Error creating contact');
+      }
 
       router.push({
         pathname: '/(tabs)/deposit/confirm',
         params: {
-          recipientId: newContact.id,
-          recipientName: newContact.name,
+          recipientId: result.data.id,
+          recipientName: result.data.name,
           accountNumber: account,
           amount: params.amount,
           bankCode,
@@ -137,7 +166,6 @@ export default function NewRecipient() {
         }
       });
     } catch (error) {
-      console.error('Error saving contact:', error);
       Toast.show({
         type: 'error',
         text1: 'Error',
@@ -146,11 +174,13 @@ export default function NewRecipient() {
       });
     } finally {
       setIsLoading(false);
+      setShowConfirmation(false);
+      bottomSheetRef.current?.close();
     }
   };
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -327,7 +357,7 @@ export default function NewRecipient() {
               styles.submitButton,
               isLoading && styles.submitButtonDisabled
             ]}
-            onPress={handleSubmit}
+            onPress={handleShowConfirmation}
             disabled={isLoading}
           >
             <Text style={styles.submitButtonText}>
@@ -335,6 +365,77 @@ export default function NewRecipient() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Save Confirmation Bottom Sheet */}
+        <Portal>
+          <BottomSheet
+            ref={bottomSheetRef}
+            index={-1}
+            snapPoints={snapPoints}
+            enablePanDownToClose
+            handleStyle={styles.bottomSheetHandle}
+            handleIndicatorStyle={styles.bottomSheetIndicator}
+            backgroundStyle={styles.bottomSheetBackground}
+            onChange={(index) => {
+              if (index === -1) {
+                setShowConfirmation(false);
+              }
+            }}
+          >
+            <View style={styles.bottomSheetContent}>
+              <Text style={styles.bottomSheetTitle}>
+                Guardar contacto
+              </Text>
+              <Text style={styles.bottomSheetMessage}>
+                ¿Estás seguro que deseas guardar este contacto?
+              </Text>
+              <View style={styles.bottomSheetActions}>
+                <TouchableOpacity 
+                  style={[styles.bottomSheetButton, styles.cancelButton]} 
+                  onPress={handleCancelConfirmation}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.bottomSheetButton, styles.confirmButton]} 
+                  onPress={handleSubmit}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.confirmButtonText}>{isLoading ? 'Guardando...' : 'Guardar'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </BottomSheet>
+        </Portal>
+
+        {/* Web fallback */}
+        {isWeb && showConfirmation && (
+          <View style={styles.webModalOverlay}>
+            <View style={styles.webModalContent}>
+              <Text style={styles.bottomSheetTitle}>
+                Guardar contacto
+              </Text>
+              <Text style={styles.bottomSheetMessage}>
+                ¿Estás seguro que deseas guardar este contacto?
+              </Text>
+              <View style={styles.bottomSheetActions}>
+                <TouchableOpacity 
+                  style={[styles.bottomSheetButton, styles.cancelButton]} 
+                  onPress={handleCancelConfirmation}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.bottomSheetButton, styles.confirmButton]} 
+                  onPress={handleSubmit}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.confirmButtonText}>{isLoading ? 'Guardando...' : 'Guardar'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
       <Toast 
         config={{
@@ -362,7 +463,7 @@ export default function NewRecipient() {
           )
         }}
       />
-    </>
+    </GestureHandlerRootView>
   );
 }
 
@@ -511,6 +612,88 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.darkGray,
     fontFamily: 'ClashDisplay',
+  },
+  // Bottom Sheet Styles
+  bottomSheetBackground: {
+    backgroundColor: colors.white,
+  },
+  bottomSheetHandle: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  bottomSheetIndicator: {
+    backgroundColor: colors.lightGray,
+    width: 40,
+  },
+  bottomSheetContent: {
+    padding: 24,
+  },
+  bottomSheetTitle: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 20,
+    color: colors.black,
+    marginBottom: 12,
+  },
+  bottomSheetMessage: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    color: colors.darkGray,
+    marginBottom: 24,
+  },
+  bottomSheetActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  bottomSheetButton: {
+    borderRadius: 12,
+    padding: 16,
+    flex: 1,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: colors.beige,
+    marginRight: 8,
+  },
+  cancelButtonText: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    color: colors.black,
+  },
+  confirmButton: {
+    backgroundColor: colors.black,
+    marginLeft: 8,
+  },
+  confirmButtonText: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    color: colors.white,
+  },
+  webModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  webModalContent: {
+    width: '80%',
+    maxWidth: 400,
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
 

@@ -1,8 +1,8 @@
+import { getAuthToken } from '../src/utils/jwt-utils';
 import axios, { AxiosError } from 'axios';
 
-
-const SPEI_API_BASE_URL = process.env.EXPO_PUBLIC_SPEI_API_URL || process.env.SPEI_API_URL 
-//const SPEI_API_BASE_URL = 'http://localhost:3001/api/spt/';
+const SPEI_API_BASE_URL = process.env.EXPO_PUBLIC_SPEI_API_URL
+//const SPEI_API_BASE_URL = 'http://localhost:3001/api/stp/';
 
 export interface SpeiTransferPayload {
   claveRastreo: string;
@@ -66,15 +66,18 @@ export class SpeiService {
       //   payload
       // });
 
-      const response = await axios.post(
-        `${SPEI_API_BASE_URL}/registraOrden`,
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
+    const token = getAuthToken();
+
+    const response = await axios.post(
+      `${SPEI_API_BASE_URL}/registraOrden`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         }
-      );
+      }
+    );
 
       // console.log('📥 SPEI response:', response.data);
 
@@ -109,7 +112,7 @@ export class SpeiService {
 
       return {
         success: false,
-        error: error instanceof AxiosError 
+        error: error instanceof AxiosError
           ? error.response?.data?.message || error.message
           : 'Error desconocido'
       };
@@ -122,9 +125,9 @@ export class SpeiService {
         `${SPEI_API_BASE_URL}/transacciones`,
         { claveRastreo }
       );
-      
+
       // console.log('📊 Transfer status check:', response.data);
-      
+
       // Simplify the response handling
       return {
         success: response.data.estado === 'LQ',
@@ -136,7 +139,7 @@ export class SpeiService {
       // console.error('Error checking transfer status:', error);
       return {
         success: false,
-        error: error instanceof AxiosError 
+        error: error instanceof AxiosError
           ? error.response?.data?.message || error.message
           : 'Error al verificar el estado de la transferencia'
       };
@@ -168,4 +171,4 @@ export class SpeiService {
       throw error;
     }
   }
-} 
+}

@@ -39,7 +39,7 @@ export async function registerForPushNotificationsAsync() {
     
     // Get the token that uniquely identifies this device
     token = await Notifications.getExpoPushTokenAsync({
-      projectId: process.env.EXPO_PUBLIC_PROJECT_ID, // Add this to your .env file
+      projectId: process.env.EXPO_PUBLIC_PROJECT_ID || "90a7579b-5a8d-4191-8bba-bc4f00537579",
     });
   } else {
     console.log('Must use physical device for Push Notifications');
