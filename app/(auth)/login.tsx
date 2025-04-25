@@ -147,7 +147,7 @@ export default function LoginScreen() {
       }
       
     } catch (error: any) {
-      console.error('Login error:', error);
+     
       
       let errorTitle = 'Error';
       let errorMessage = 'Hubo un error inesperado. Por favor intenta de nuevo.';

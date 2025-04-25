@@ -61,6 +61,7 @@ export interface Movement {
   concept?: string
   concept2?: string
   metadata?: any
+  mfa_enabled?: boolean
 }
 
 export interface Contact {
@@ -103,6 +104,7 @@ export const db = {
       account_type?: 'FISICA' | 'MORAL' | 'PENDING'
       onboarding_status?: 'PENDING' | 'COMPLETED'
       account_status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
+      mfa_enabled?: boolean
     }) {
       const { data, error } = await supabaseAdmin
         .from('users')

@@ -1,10 +1,10 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/app/constants/colors';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import Toast from 'react-native-toast-message';
@@ -13,6 +13,10 @@ import { supabase, supabaseAdmin } from '@/app/src/db';
 import { SpeiService } from '@/app/components/spei.service';
 import { createTransfer } from '@/app/constants/transfer';
 import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
+import BottomSheet from '@gorhom/bottom-sheet';
+import Portal from '@gorhom/bottom-sheet';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Clipboard from 'expo-clipboard';
 
 const COMMISSION_AMOUNT = 5.80;
 const COMMISSION_CLABE = '646180527800000009';
@@ -42,6 +46,48 @@ const getInstitutionCode = (bankCode: string) => {
   return "90646";
 };
 
+// OTP Input Component
+const OTPInput = ({ 
+  value, 
+  onChange, 
+  cellCount = 6 
+}: { 
+  value: string; 
+  onChange: (value: string) => void; 
+  cellCount?: number; 
+}) => {
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  
+  const handleCellFocus = (index: number) => {
+    setFocusedIndex(index);
+  };
+
+  const handleKeyPress = (index: number, keyValue: string) => {
+    const newValue = value.substring(0, index) + keyValue + value.substring(index + 1);
+    onChange(newValue);
+    if (index < cellCount - 1 && keyValue !== '') {
+      setFocusedIndex(index + 1);
+    }
+  };
+
+  return (
+    <View style={otpStyles.container}>
+      {Array(cellCount).fill(0).map((_, index) => (
+        <TextInput
+          key={index}
+          style={[otpStyles.cell, focusedIndex === index && otpStyles.focusedCell]}
+          keyboardType="number-pad"
+          maxLength={1}
+          onFocus={() => handleCellFocus(index)}
+          onChangeText={(text) => handleKeyPress(index, text)}
+          value={value[index] || ''}
+          selectionColor={colors.black}
+        />
+      ))}
+    </View>
+  );
+};
+
 export default function ConfirmDepositScreen() {
   const { 
     amount, 
@@ -67,6 +113,15 @@ export default function ConfirmDepositScreen() {
   const [concept2, setConcept2] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [userCommission, setUserCommission] = useState(5.80); // Default fallback
+  const [mfaCode, setMfaCode] = useState('');
+  const [showMfaModal, setShowMfaModal] = useState(false);
+  const [clipboardCode, setClipboardCode] = useState('');
+  
+  // Bottom sheet reference
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  
+  // Bottom sheet snap points
+  const snapPoints = useMemo(() => ['50%'], []);
 
   useEffect(() => {
     async function fetchUserCommission() {
@@ -82,10 +137,26 @@ export default function ConfirmDepositScreen() {
     fetchUserCommission();
   }, []);
 
+  useEffect(() => {
+    const checkClipboard = async () => {
+      const text = await Clipboard.getStringAsync();
+      if (text && text.length === 6 && /^\d+$/.test(text)) {
+        setClipboardCode(text);
+      }
+    };
+    checkClipboard();
+  }, [showMfaModal]);
+
   // Update commission logic to use dynamic user commission
   const isInternalTransfer = accountNumber?.startsWith('6461805278');
   const appliedCommission = isInternalTransfer ? 0 : userCommission;
   const totalAmount = Number(amount) + appliedCommission;
+
+  const handlePasteCode = async () => {
+    if (clipboardCode) {
+      setMfaCode(clipboardCode);
+    }
+  };
 
   const handleConfirm = async () => {
     if (!concept) {
@@ -99,11 +170,49 @@ export default function ConfirmDepositScreen() {
       return;
     }
 
+    setShowMfaModal(true);
+  };
+
+  const handleMfaConfirm = async () => {
+    if (mfaCode.length !== 6) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'El código debe tener 6 dígitos',
+        position: 'bottom',
+        visibilityTime: 3000,
+      });
+      return;
+    }
+
     try {
       setIsLoading(true);
       const currentUser = await getCurrentUser();
       if (!currentUser?.id) throw new Error('No authenticated user');
 
+      // First verify MFA
+      const { data: factorsData } = await supabase.auth.mfa.listFactors();
+      const factor = factorsData?.totp?.[0];
+
+      if (!factor) throw new Error('MFA no configurado');
+
+      // Challenge the factor
+      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId: factor.id
+      });
+
+      if (challengeError) throw challengeError;
+
+      // Verify the challenge
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId: factor.id,
+        challengeId: challengeData.id,
+        code: mfaCode
+      });
+
+      if (verifyError) throw verifyError;
+
+      // If MFA verification successful, proceed with transfer
       const finalInstitutionCode = getInstitutionCode(bankCode);
 
       const formData = new FormData();
@@ -116,7 +225,6 @@ export default function ConfirmDepositScreen() {
       formData.append('beneficiaryName', recipientName);
 
       if (accountType === 'tarjeta') {
-        // Use the institution code from our getter function
         formData.append('institucionContraparte', finalInstitutionCode);
       }
 
@@ -166,6 +274,7 @@ export default function ConfirmDepositScreen() {
       });
     } finally {
       setIsLoading(false);
+      setShowMfaModal(false);
     }
   };
 
@@ -247,6 +356,64 @@ export default function ConfirmDepositScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      <Modal
+        visible={showMfaModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMfaModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Confirmar transferencia</Text>
+              <TouchableOpacity 
+                onPress={() => setShowMfaModal(false)}
+                style={styles.closeButton}
+              >
+                <Feather name="x" size={24} color={colors.black} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.modalMessage}>
+                Ingresa el código de verificación de 6 dígitos de tu aplicación de autenticación
+              </Text>
+              
+              <OTPInput 
+                value={mfaCode} 
+                onChange={setMfaCode}
+              />
+
+              {clipboardCode && (
+                <TouchableOpacity 
+                  style={styles.pasteButton}
+                  onPress={handlePasteCode}
+                >
+                  <Feather name="clipboard" size={20} color={colors.black} />
+                  <Text style={styles.pasteButtonText}>Pegar código</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity 
+                style={[
+                  styles.confirmButton,
+                  (mfaCode.length !== 6 || isLoading) && styles.buttonDisabled
+                ]}
+                onPress={handleMfaConfirm}
+                disabled={mfaCode.length !== 6 || isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.confirmButtonText}>Confirmar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Toast 
         config={{
           error: (props) => (
@@ -384,6 +551,103 @@ const styles = StyleSheet.create({
   confirmButtonDisabled: {
     backgroundColor: colors.lightGray,
   },
+  bottomSheetBackground: {
+    backgroundColor: colors.white,
+  },
+  bottomSheetHandle: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  bottomSheetIndicator: {
+    backgroundColor: colors.lightGray,
+    width: 40,
+  },
+  bottomSheetContent: {
+    padding: 24,
+  },
+  bottomSheetTitle: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 20,
+    color: colors.black,
+    marginBottom: 12,
+  },
+  bottomSheetMessage: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    color: colors.darkGray,
+    marginBottom: 24,
+  },
+  bottomSheetButton: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    backgroundColor: colors.lightGray,
+  },
+  pasteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    marginBottom: 24,
+    backgroundColor: colors.beige,
+    borderRadius: 8,
+  },
+  pasteButtonText: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 14,
+    color: colors.black,
+    marginLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 400 : '100%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.beige,
+  },
+  modalTitle: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 20,
+    color: colors.black,
+  },
+  closeButton: {
+    padding: 8,
+  },
+  modalBody: {
+    padding: 24,
+  },
+  modalMessage: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    color: colors.darkGray,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
 });
 
 const toastStyles = StyleSheet.create({
@@ -426,5 +690,29 @@ const toastStyles = StyleSheet.create({
     fontFamily: 'ClashDisplay',
     fontSize: 14,
     color: colors.darkGray,
+  },
+});
+
+const otpStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 24,
+  },
+  cell: {
+    width: 45,
+    height: 50,
+    lineHeight: 50,
+    fontSize: 24,
+    borderWidth: 2,
+    borderColor: colors.beige,
+    borderRadius: 8,
+    textAlign: 'center',
+    fontFamily: 'ClashDisplay',
+    color: colors.black,
+  },
+  focusedCell: {
+    borderColor: colors.black,
   },
 });
