@@ -74,19 +74,19 @@ export default function Card() {
           >
             <Feather name="arrow-left" size={24} color={colors.black} />
           </TouchableOpacity>
-          <Text style={styles.title}>Tarjeta</Text>
+          <Text style={styles.title}>Cuenta</Text>
         </View>
 
         <View style={styles.content}>
           {/* Card Information Section */}
-          <View style={styles.cardContainer}>
+          {/* <View style={styles.cardContainer}>
             <View style={styles.card}>
-              {/* Add your card design here */}
+           
               <Text style={styles.cardNumber}>**** **** **** 1234</Text>
               <Text style={styles.cardHolder}>JOHN DOE</Text>
               <Text style={styles.expiry}>12/25</Text>
             </View>
-          </View>
+          </View> */}
 
           {/* CLABE Section */}
           <View style={styles.clabeContainer}>

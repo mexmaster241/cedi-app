@@ -29,6 +29,14 @@ export default function LoginScreen() {
       const savedEmail = await SecureStore.getItemAsync('userEmail');
       const hasSaved = savedEmail !== null;
       setHasSavedCredentials(hasSaved);
+
+      // If device supports biometrics and has saved credentials, trigger authentication
+      if (compatible && hasSaved) {
+        // Small delay to ensure UI is ready
+        setTimeout(() => {
+          handleBiometricAuth();
+        }, 500);
+      }
     })();
   }, []);
 
@@ -54,9 +62,53 @@ export default function LoginScreen() {
         const savedPassword = await SecureStore.getItemAsync('userPassword');
         
         if (savedEmail && savedPassword) {
-          setEmail(savedEmail);
-          setPassword(savedPassword);
-          await handleLogin();
+          // Check network status
+          const networkState = await NetInfo.fetch();
+          if (!networkState.isConnected) {
+            Toast.show({
+              type: 'error',
+              text1: 'Error',
+              text2: 'No hay conexión a internet',
+              position: 'bottom',
+              visibilityTime: 3000,
+            });
+            return;
+          }
+
+          try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+              email: savedEmail,
+              password: savedPassword
+            });
+
+            if (error) throw error;
+            if (data.user) {
+              router.replace('/');
+            }
+          } catch (error: any) {
+            let errorTitle = 'Error';
+            let errorMessage = 'Hubo un error inesperado. Por favor intenta de nuevo.';
+            
+            switch(error.message) {
+              case 'Email not confirmed':
+                errorMessage = 'Por favor verifica tu cuenta de email';
+                break;
+              case 'Invalid login credentials':
+                errorMessage = 'Email o contraseña incorrectos';
+                break;
+              case 'User not found':
+                errorMessage = 'No existe una cuenta con este email';
+                break;
+            }
+            
+            Toast.show({
+              type: 'error',
+              text1: errorTitle,
+              text2: errorMessage,
+              position: 'bottom',
+              visibilityTime: 3000,
+            });
+          }
         }
       }
     } catch (error) {

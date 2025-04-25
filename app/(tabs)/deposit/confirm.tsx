@@ -112,6 +112,14 @@ const OTPInput = ({
   );
 };
 
+// Add this formatter function after the imports and before the component
+const formatNumber = (num: number | string) => {
+  return Number(num).toLocaleString('es-MX', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
+
 export default function ConfirmDepositScreen() {
   const { 
     amount, 
@@ -183,7 +191,7 @@ export default function ConfirmDepositScreen() {
   };
 
   const handleConfirm = async () => {
-    if (!concept) {
+    if (!concept || concept.trim() === '') {
       Toast.show({
         type: 'error',
         text1: 'Error',
@@ -319,23 +327,23 @@ export default function ConfirmDepositScreen() {
         <View style={styles.content}>
           <View style={styles.amountContainer}>
             <Text style={styles.currencySymbol}>$</Text>
-            <Text style={styles.amount}>{parseFloat(amount).toFixed(2)}</Text>
+            <Text style={styles.amount}>{formatNumber(amount)}</Text>
           </View>
 
           <View style={styles.detailsCard}>
             <Text style={styles.label}>Monto:</Text>
-            <Text style={styles.value}>${amount}</Text>
+            <Text style={styles.value}>${formatNumber(amount)}</Text>
 
             {/* Only show commission if not internal transfer */}
             {!isInternalTransfer && (
               <>
                 <Text style={styles.label}>Comisión:</Text>
-                <Text style={styles.value}>${userCommission.toFixed(2)}</Text>
+                <Text style={styles.value}>${formatNumber(userCommission)}</Text>
               </>
             )}
 
             <Text style={styles.label}>Total:</Text>
-            <Text style={styles.totalValue}>${totalAmount.toFixed(2)}</Text>
+            <Text style={styles.totalValue}>${formatNumber(totalAmount)}</Text>
           </View>
 
           <View style={styles.recipientCard}>
