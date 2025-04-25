@@ -3,6 +3,9 @@ import 'dotenv/config';
 export default {
   expo: {
     // ... other config
+    plugins: [
+      "expo-secure-store"
+    ],
     extra: {
       speiApiUrl: process.env.SPEI_API_URL,
       supabaseUrl: process.env.SUPABASE_URL,

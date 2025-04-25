@@ -62,7 +62,7 @@ export default function IntroScreen() {
           style={styles.button}
           onPress={() => router.push('/login')}
         >
-          <Text style={styles.buttonText}>Empezar</Text>
+          <Text style={styles.buttonText}>Entrar</Text>
         </TouchableOpacity>
       </Animated.View>
     </LinearGradient>

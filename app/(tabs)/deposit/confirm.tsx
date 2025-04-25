@@ -56,17 +56,34 @@ const OTPInput = ({
   onChange: (value: string) => void; 
   cellCount?: number; 
 }) => {
+  const inputRefs = useRef<Array<TextInput | null>>([]);
   const [focusedIndex, setFocusedIndex] = useState(0);
-  
+
+  useEffect(() => {
+    // Pre-fill refs array
+    inputRefs.current = inputRefs.current.slice(0, cellCount);
+  }, [cellCount]);
+
   const handleCellFocus = (index: number) => {
     setFocusedIndex(index);
   };
 
   const handleKeyPress = (index: number, keyValue: string) => {
+    if (keyValue === '' && index > 0) {
+      // Handle backspace
+      const newValue = value.slice(0, index) + value.slice(index + 1);
+      onChange(newValue);
+      inputRefs.current[index - 1]?.focus();
+      return;
+    }
+
+    if (!/^\d*$/.test(keyValue)) return; // Only allow numbers
+
     const newValue = value.substring(0, index) + keyValue + value.substring(index + 1);
     onChange(newValue);
+    
     if (index < cellCount - 1 && keyValue !== '') {
-      setFocusedIndex(index + 1);
+      inputRefs.current[index + 1]?.focus();
     }
   };
 
@@ -75,13 +92,20 @@ const OTPInput = ({
       {Array(cellCount).fill(0).map((_, index) => (
         <TextInput
           key={index}
-          style={[otpStyles.cell, focusedIndex === index && otpStyles.focusedCell]}
+          ref={ref => inputRefs.current[index] = ref}
+          style={[
+            otpStyles.cell,
+            focusedIndex === index && otpStyles.focusedCell,
+            value[index] && otpStyles.filledCell
+          ]}
           keyboardType="number-pad"
           maxLength={1}
           onFocus={() => handleCellFocus(index)}
           onChangeText={(text) => handleKeyPress(index, text)}
           value={value[index] || ''}
           selectionColor={colors.black}
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
         />
       ))}
     </View>
@@ -610,33 +634,36 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: colors.white,
-    borderRadius: 16,
+    borderRadius: 24,
     width: '100%',
     maxWidth: Platform.OS === 'web' ? 400 : '100%',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
     shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowRadius: 8,
     elevation: 5,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: colors.beige,
   },
   modalTitle: {
     fontFamily: 'ClashDisplay',
-    fontSize: 20,
+    fontSize: 22,
     color: colors.black,
+    fontWeight: '600',
   },
   closeButton: {
     padding: 8,
+    borderRadius: 20,
+    backgroundColor: colors.beige,
   },
   modalBody: {
     padding: 24,
@@ -645,8 +672,9 @@ const styles = StyleSheet.create({
     fontFamily: 'ClashDisplay',
     fontSize: 16,
     color: colors.darkGray,
-    marginBottom: 24,
+    marginBottom: 32,
     textAlign: 'center',
+    lineHeight: 24,
   },
 });
 
@@ -696,23 +724,32 @@ const toastStyles = StyleSheet.create({
 const otpStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
     width: '100%',
-    marginBottom: 24,
+    marginBottom: 32,
+    paddingHorizontal: 16,
   },
   cell: {
-    width: 45,
-    height: 50,
-    lineHeight: 50,
+    width: 48,
+    height: 56,
     fontSize: 24,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.beige,
-    borderRadius: 8,
+    borderRadius: 12,
     textAlign: 'center',
     fontFamily: 'ClashDisplay',
     color: colors.black,
+    backgroundColor: colors.white,
+    paddingVertical: 8,
   },
   focusedCell: {
     borderColor: colors.black,
+    borderWidth: 2,
+    backgroundColor: colors.beige,
+  },
+  filledCell: {
+    backgroundColor: colors.beige,
   },
 });

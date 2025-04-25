@@ -4,6 +4,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/app/src/db';
+import { SecurityProvider } from './context/SecurityContext';
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -30,10 +31,8 @@ export default function RootLayout() {
         }
 
         if (session?.user) {
-         
           setIsAuthenticated(true);
         } else {
-  
           setIsAuthenticated(false);
         }
       } catch (error) {
@@ -48,7 +47,6 @@ export default function RootLayout() {
     // Add auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-      
         setIsAuthenticated(!!session);
       }
     );
@@ -62,7 +60,6 @@ export default function RootLayout() {
     if (isAuthChecking) return;
 
     const inAuthGroup = segments[0] === "(auth)";
-    
 
     if (!isAuthenticated && !inAuthGroup) {
       console.log('Redirecting to login');
@@ -80,16 +77,18 @@ export default function RootLayout() {
   }, [fontsLoaded, isAuthChecking]);
 
   return (
-    <Stack 
-      screenOptions={{ 
-        headerShown: false,
-        contentStyle: {
-          backgroundColor: 'transparent'
-        }
-      }}
-    >
-      <Slot />
-    </Stack>
+    <SecurityProvider>
+      <Stack 
+        screenOptions={{ 
+          headerShown: false,
+          contentStyle: {
+            backgroundColor: 'transparent'
+          }
+        }}
+      >
+        <Slot />
+      </Stack>
+    </SecurityProvider>
   );
 }
 

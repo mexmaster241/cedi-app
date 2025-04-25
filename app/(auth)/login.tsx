@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { colors } from '../constants/colors';
 import { supabase } from '@/app/src/db';
 import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from '@expo/vector-icons';
-import * as LocalAuthentication from 'expo-local-authentication';
-import { Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Feather } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 
 export default function LoginScreen() {
@@ -18,33 +17,26 @@ export default function LoginScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
-  const [savedCredentials, setSavedCredentials] = useState<{email: string, password: string} | null>(null);
+  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
 
+  // Check biometric support and saved credentials
   useEffect(() => {
-    checkBiometricSupport();
-    loadSavedCredentials();
+    (async () => {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      setIsBiometricSupported(compatible);
+      
+      // Check for saved credentials
+      const savedEmail = await SecureStore.getItemAsync('userEmail');
+      const hasSaved = savedEmail !== null;
+      setHasSavedCredentials(hasSaved);
+    })();
   }, []);
-
-  const checkBiometricSupport = async () => {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    setIsBiometricSupported(compatible);
-  };
-
-  const loadSavedCredentials = async () => {
-    try {
-      const storedCredentials = await SecureStore.getItemAsync('userCredentials');
-      if (storedCredentials) {
-        setSavedCredentials(JSON.parse(storedCredentials));
-      }
-    } catch (error) {
-      console.error('Error loading credentials:', error);
-    }
-  };
 
   const saveCredentials = async (email: string, password: string) => {
     try {
-      const credentials = JSON.stringify({ email, password });
-      await SecureStore.setItemAsync('userCredentials', credentials);
+      await SecureStore.setItemAsync('userEmail', email);
+      await SecureStore.setItemAsync('userPassword', password);
+      setHasSavedCredentials(true);
     } catch (error) {
       console.error('Error saving credentials:', error);
     }
@@ -52,59 +44,29 @@ export default function LoginScreen() {
 
   const handleBiometricAuth = async () => {
     try {
-      // First check if we have stored credentials
-      const storedCredentials = await SecureStore.getItemAsync('userCredentials');
-      
-      // Perform biometric authentication
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Autenticación biométrica',
-        fallbackLabel: 'Usar contraseña',
-        cancelLabel: 'Cancelar',
+      const biometricAuth = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate to login',
+        fallbackLabel: 'Enter password',
       });
 
-      if (result.success) {
-        // If we have stored credentials, use them
-        if (storedCredentials) {
-          const savedCredentials = JSON.parse(storedCredentials);
-          try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-              email: savedCredentials.email.trim().toLowerCase(),
-              password: savedCredentials.password
-            });
-            
-            if (error) throw error;
-            
-            if (data.user) {
-              router.replace('/');
-            }
-          } catch (error: any) {
-            console.error('Biometric login error:', error);
-            Toast.show({
-              type: 'error',
-              text1: 'Error de inicio de sesión',
-              text2: 'No se pudo iniciar sesión con biometría. Intenta con tu correo y contraseña.',
-              position: 'bottom',
-              visibilityTime: 3000,
-            });
-          }
-        } else {
-          // No credentials stored - prompt for email to associate with this device's Face ID
-          // Show a modal or navigate to a special "first-time biometric" screen
-          Toast.show({
-            type: 'info',
-            text1: 'Configuración necesaria',
-            text2: 'Para usar Face ID, primero inicia sesión manualmente una vez.',
-            position: 'bottom',
-            visibilityTime: 4000,
-          });
-          
-          // Optional: You could set a flag to show a special instruction
-          // setShowBiometricOnboarding(true);
+      if (biometricAuth.success) {
+        const savedEmail = await SecureStore.getItemAsync('userEmail');
+        const savedPassword = await SecureStore.getItemAsync('userPassword');
+        
+        if (savedEmail && savedPassword) {
+          setEmail(savedEmail);
+          setPassword(savedPassword);
+          await handleLogin();
         }
       }
     } catch (error) {
-      console.error('Biometric error:', error);
-      setErrorMessage('Error en autenticación biométrica');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Biometric authentication failed',
+        position: 'bottom',
+        visibilityTime: 3000,
+      });
     }
   };
 
@@ -133,22 +95,27 @@ export default function LoginScreen() {
       if (error) throw error;
       
       if (data.user) {
-        // Store credentials before navigation
-        try {
-          await saveCredentials(trimmedEmail, password);
-        } catch (credError) {
-          console.error('Error saving credentials:', credError);
+        // After successful login, ask user if they want to save credentials
+        if (!hasSavedCredentials) {
+          Alert.alert(
+            'Save Login',
+            'Would you like to enable biometric login for next time?',
+            [
+              {
+                text: 'No',
+                style: 'cancel'
+              },
+              {
+                text: 'Yes',
+                onPress: () => saveCredentials(trimmedEmail, password)
+              }
+            ]
+          );
         }
-        
-        // Use setTimeout to ensure any state updates complete before navigation
-        setTimeout(() => {
-          router.replace('/');
-        }, 100);
+        router.replace('/');
       }
       
     } catch (error: any) {
-     
-      
       let errorTitle = 'Error';
       let errorMessage = 'Hubo un error inesperado. Por favor intenta de nuevo.';
       
@@ -217,17 +184,12 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        {isBiometricSupported && (
+        {isBiometricSupported && hasSavedCredentials && (
           <TouchableOpacity 
             style={styles.biometricButton}
             onPress={handleBiometricAuth}
           >
-            <Ionicons 
-              name={Platform.OS === 'ios' ? 'finger-print' : 'finger-print'} 
-              size={24} 
-              color={colors.black} 
-            />
-            <Text style={styles.biometricText}>Usar biometría</Text>
+            <Ionicons name="scan-outline" size={32} color={colors.black} />
           </TouchableOpacity>
         )}
 
@@ -361,19 +323,11 @@ const styles = StyleSheet.create({
     transform: [{ translateY: -12 }],
   },
   biometricButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: colors.white,
-  },
-  biometricText: {
-    marginLeft: 8,
-    fontFamily: 'ClashDisplay',
-    fontSize: 14,
-    color: colors.black,
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 8,
   },
 });
 

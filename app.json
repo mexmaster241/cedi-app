@@ -8,9 +8,9 @@
     "scheme": "cedi",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/logo-cedi-splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#e8d9ca"
     },
     "ios": {
       "bundleIdentifier": "com.soycedi.cedi",
@@ -26,7 +26,7 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#e8d9ca"
       },
       "useNextNotificationsApi": true
     },
@@ -40,10 +40,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/logo-cedi-splash.png",
+          "imageWidth": 800,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#e8d9ca"
         }
       ],
       [

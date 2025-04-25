@@ -45,6 +45,43 @@ export function ActionBar() {
 
   const handleDepositPress = () => {
     if (!mfaEnabled) {
+      Toast.show({
+        type: 'error',
+        text1: 'MFA Requerido',
+        text2: 'Necesitas activar la autenticación de dos factores en soycedi.com',
+        position: 'bottom',
+        visibilityTime: 3000,
+        props: {
+          style: {
+            width: '90%',
+            backgroundColor: colors.white,
+            borderRadius: 12,
+            padding: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: {
+              width: 0,
+              height: 2,
+            },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+            elevation: 3,
+            marginBottom: 16,
+          },
+          text1Style: {
+            fontFamily: 'ClashDisplay',
+            fontSize: 16,
+            color: colors.black,
+            marginBottom: 4,
+          },
+          text2Style: {
+            fontFamily: 'ClashDisplay',
+            fontSize: 14,
+            color: colors.darkGray,
+          }
+        }
+      });
       bottomSheetRef.current?.expand();
       return;
     }
@@ -113,7 +150,32 @@ export function ActionBar() {
         </View>
       </BottomSheet>
 
-      <Toast />
+      <Toast 
+        config={{
+          error: (props) => (
+            <View style={toastStyles.container}>
+              <View style={toastStyles.iconContainer}>
+                <Feather name="alert-circle" size={24} color={colors.black} />
+              </View>
+              <View style={toastStyles.textContainer}>
+                <Text style={toastStyles.title}>{props.text1}</Text>
+                <Text style={toastStyles.message}>{props.text2}</Text>
+              </View>
+            </View>
+          ),
+          success: (props) => (
+            <View style={toastStyles.container}>
+              <View style={[toastStyles.iconContainer, { backgroundColor: colors.black }]}>
+                <Feather name="check" size={24} color={colors.white} />
+              </View>
+              <View style={toastStyles.textContainer}>
+                <Text style={toastStyles.title}>{props.text1}</Text>
+                <Text style={toastStyles.message}>{props.text2}</Text>
+              </View>
+            </View>
+          )
+        }}
+      />
     </GestureHandlerRootView>
   );
 }
@@ -187,5 +249,48 @@ const styles = StyleSheet.create({
     fontFamily: 'ClashDisplay',
     fontSize: 16,
     color: colors.white,
+  },
+});
+
+const toastStyles = StyleSheet.create({
+  container: {
+    width: '90%',
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginBottom: 16,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.beige,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  title: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    color: colors.black,
+    marginBottom: 4,
+  },
+  message: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 14,
+    color: colors.darkGray,
   },
 });
