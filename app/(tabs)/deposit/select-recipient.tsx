@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
@@ -80,7 +80,7 @@ export default function SelectRecipientScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [userCommission, setUserCommission] = useState(5.80); // Default fallback
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
-  const [bottomSheetVisible, setBottomSheetVisible] = useState(-1);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   
   // Bottom sheet reference
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -163,19 +163,18 @@ export default function SelectRecipientScreen() {
     } catch (error) {
       // Error handled silently
     } finally {
-      // Close the bottom sheet
-      bottomSheetRef.current?.close();
+      setShowDeleteModal(false);
       setContactToDelete(null);
     }
   };
 
   const handleShowDeleteConfirmation = useCallback((contact: Contact) => {
     setContactToDelete(contact);
-    setBottomSheetVisible(0); // Show the sheet by setting index to 0
+    setShowDeleteModal(true);
   }, []);
 
   const handleCancelDelete = useCallback(() => {
-    setBottomSheetVisible(-1); // Hide the sheet
+    setShowDeleteModal(false);
     setContactToDelete(null);
   }, []);
 
@@ -284,24 +283,15 @@ export default function SelectRecipientScreen() {
           )}
         </View>
 
-        {/* Portal for bottom sheet (helps with web rendering) */}
-        <Portal>
-          <BottomSheet
-            ref={bottomSheetRef}
-            index={bottomSheetVisible}
-            snapPoints={snapPoints}
-            enablePanDownToClose
-            handleStyle={styles.bottomSheetHandle}
-            handleIndicatorStyle={styles.bottomSheetIndicator}
-            backgroundStyle={styles.bottomSheetBackground}
-            onChange={(index) => {
-              if (index === -1) {
-                setContactToDelete(null);
-              }
-              setBottomSheetVisible(index);
-            }}
-          >
-            <View style={styles.bottomSheetContent}>
+        {/* Delete Confirmation Modal */}
+        <Modal
+          visible={showDeleteModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelDelete}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
               <Text style={styles.bottomSheetTitle}>
                 Eliminar contacto
               </Text>
@@ -325,36 +315,8 @@ export default function SelectRecipientScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </BottomSheet>
-        </Portal>
-
-        {/* Then in the return statement, add a conditional rendering for web */}
-        {isWeb && contactToDelete && (
-          <View style={styles.webModalOverlay}>
-            <View style={styles.webModalContent}>
-              <Text style={styles.bottomSheetTitle}>
-                Eliminar contacto
-              </Text>
-              <Text style={styles.bottomSheetMessage}>
-                ¿Estás seguro que deseas eliminar este contacto?
-              </Text>
-              <View style={styles.bottomSheetActions}>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.cancelButton]} 
-                  onPress={handleCancelDelete}
-                >
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.deleteConfirmButton]} 
-                  onPress={() => contactToDelete && handleDeleteContact(contactToDelete.id)}
-                >
-                  <Text style={styles.deleteConfirmButtonText}>Eliminar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
-        )}
+        </Modal>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -538,6 +500,28 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     backgroundColor: colors.white,
     borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  // Update modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxWidth: 400,
+    backgroundColor: colors.white,
+    borderRadius: 20,
     padding: 24,
     shadowColor: '#000',
     shadowOffset: {

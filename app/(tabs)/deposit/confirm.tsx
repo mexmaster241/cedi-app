@@ -169,24 +169,31 @@ export default function ConfirmDepositScreen() {
     fetchUserCommission();
   }, []);
 
-  useEffect(() => {
-    const checkClipboard = async () => {
-      const text = await Clipboard.getStringAsync();
-      if (text && text.length === 6 && /^\d+$/.test(text)) {
-        setClipboardCode(text);
-      }
-    };
-    checkClipboard();
-  }, [showMfaModal]);
-
   // Update commission logic to use dynamic user commission
   const isInternalTransfer = accountNumber?.startsWith('6461805278');
   const appliedCommission = isInternalTransfer ? 0 : userCommission;
   const totalAmount = Number(amount) + appliedCommission;
 
   const handlePasteCode = async () => {
-    if (clipboardCode) {
-      setMfaCode(clipboardCode);
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (text && text.length === 6 && /^\d+$/.test(text)) {
+        setMfaCode(text);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'No hay un código válido en el portapapeles',
+          position: 'bottom',
+        });
+      }
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No se pudo acceder al portapapeles',
+        position: 'bottom',
+      });
     }
   };
 
@@ -393,14 +400,20 @@ export default function ConfirmDepositScreen() {
         visible={showMfaModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowMfaModal(false)}
+        onRequestClose={() => {
+          setShowMfaModal(false);
+          setMfaCode('');
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Confirmar transferencia</Text>
               <TouchableOpacity 
-                onPress={() => setShowMfaModal(false)}
+                onPress={() => {
+                  setShowMfaModal(false);
+                  setMfaCode('');
+                }}
                 style={styles.closeButton}
               >
                 <Feather name="x" size={24} color={colors.black} />
@@ -417,15 +430,13 @@ export default function ConfirmDepositScreen() {
                 onChange={setMfaCode}
               />
 
-              {clipboardCode && (
-                <TouchableOpacity 
-                  style={styles.pasteButton}
-                  onPress={handlePasteCode}
-                >
-                  <Feather name="clipboard" size={20} color={colors.black} />
-                  <Text style={styles.pasteButtonText}>Pegar código</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity 
+                style={styles.pasteButton}
+                onPress={handlePasteCode}
+              >
+                <Feather name="clipboard" size={20} color={colors.black} />
+                <Text style={styles.pasteButtonText}>Pegar código</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity 
                 style={[

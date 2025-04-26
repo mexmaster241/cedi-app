@@ -4,16 +4,13 @@ import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '@/app/constants/colors';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import Toast from 'react-native-toast-message';
 import React from 'react';
 import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
 import { createContact } from '@/app/constants/contacts';
-import BottomSheet from '@gorhom/bottom-sheet';
-import Portal from '@gorhom/bottom-sheet';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 type AccountType = 'clabe' | 'tarjeta';
 
@@ -28,12 +25,6 @@ export default function NewRecipient() {
   const [accountType, setAccountType] = useState<AccountType>('clabe');
   const [showBankModal, setShowBankModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  
-  // Bottom sheet reference
-  const bottomSheetRef = useRef<BottomSheet>(null);
-  
-  // Bottom sheet snap points
-  const snapPoints = useMemo(() => ['30%'], []);
   
   // For web fallback
   const isWeb = Platform.OS === 'web';
@@ -118,15 +109,11 @@ export default function NewRecipient() {
 
   const handleShowConfirmation = () => {
     if (!validateForm()) return;
-    
-    // Open confirmation bottom sheet
     setShowConfirmation(true);
-    bottomSheetRef.current?.expand();
   };
   
   const handleCancelConfirmation = () => {
     setShowConfirmation(false);
-    bottomSheetRef.current?.close();
   };
 
   const handleSubmit = async () => {
@@ -175,12 +162,11 @@ export default function NewRecipient() {
     } finally {
       setIsLoading(false);
       setShowConfirmation(false);
-      bottomSheetRef.current?.close();
     }
   };
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -366,23 +352,15 @@ export default function NewRecipient() {
           </TouchableOpacity>
         </View>
 
-        {/* Save Confirmation Bottom Sheet */}
-        <Portal>
-          <BottomSheet
-            ref={bottomSheetRef}
-            index={-1}
-            snapPoints={snapPoints}
-            enablePanDownToClose
-            handleStyle={styles.bottomSheetHandle}
-            handleIndicatorStyle={styles.bottomSheetIndicator}
-            backgroundStyle={styles.bottomSheetBackground}
-            onChange={(index) => {
-              if (index === -1) {
-                setShowConfirmation(false);
-              }
-            }}
-          >
-            <View style={styles.bottomSheetContent}>
+        {/* Confirmation Modal */}
+        <Modal
+          visible={showConfirmation}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelConfirmation}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, styles.confirmationModal]}>
               <Text style={styles.bottomSheetTitle}>
                 Guardar contacto
               </Text>
@@ -401,41 +379,14 @@ export default function NewRecipient() {
                   onPress={handleSubmit}
                   disabled={isLoading}
                 >
-                  <Text style={styles.confirmButtonText}>{isLoading ? 'Guardando...' : 'Guardar'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </BottomSheet>
-        </Portal>
-
-        {/* Web fallback */}
-        {isWeb && showConfirmation && (
-          <View style={styles.webModalOverlay}>
-            <View style={styles.webModalContent}>
-              <Text style={styles.bottomSheetTitle}>
-                Guardar contacto
-              </Text>
-              <Text style={styles.bottomSheetMessage}>
-                ¿Estás seguro que deseas guardar este contacto?
-              </Text>
-              <View style={styles.bottomSheetActions}>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.cancelButton]} 
-                  onPress={handleCancelConfirmation}
-                >
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.confirmButton]} 
-                  onPress={handleSubmit}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.confirmButtonText}>{isLoading ? 'Guardando...' : 'Guardar'}</Text>
+                  <Text style={styles.confirmButtonText}>
+                    {isLoading ? 'Guardando...' : 'Guardar'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
-        )}
+        </Modal>
       </SafeAreaView>
       <Toast 
         config={{
@@ -463,7 +414,7 @@ export default function NewRecipient() {
           )
         }}
       />
-    </GestureHandlerRootView>
+    </>
   );
 }
 
@@ -549,13 +500,17 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContent: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  confirmationModal: {
+    padding: 24,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -575,6 +530,7 @@ const styles = StyleSheet.create({
   },
   bankList: {
     padding: 10,
+    maxHeight: '80%',
   },
   bankOption: {
     padding: 15,
@@ -612,22 +568,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.darkGray,
     fontFamily: 'ClashDisplay',
-  },
-  // Bottom Sheet Styles
-  bottomSheetBackground: {
-    backgroundColor: colors.white,
-  },
-  bottomSheetHandle: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  bottomSheetIndicator: {
-    backgroundColor: colors.lightGray,
-    width: 40,
-  },
-  bottomSheetContent: {
-    padding: 24,
   },
   bottomSheetTitle: {
     fontFamily: 'ClashDisplay',
@@ -668,32 +608,6 @@ const styles = StyleSheet.create({
     fontFamily: 'ClashDisplay',
     fontSize: 16,
     color: colors.white,
-  },
-  webModalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  webModalContent: {
-    width: '80%',
-    maxWidth: 400,
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
 });
 

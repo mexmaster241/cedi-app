@@ -5,6 +5,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/app/src/db';
 import { SecurityProvider } from './context/SecurityContext';
+import { registerForPushNotificationsAsync, savePushToken } from './src/services/notifications';
+import { setupDepositNotifications } from './src/services/deposit-notifications';
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -32,6 +34,24 @@ export default function RootLayout() {
 
         if (session?.user) {
           setIsAuthenticated(true);
+          
+          // Set up push notifications
+          const token = await registerForPushNotificationsAsync();
+          if (token) {
+            await savePushToken(token.data);
+          }
+
+          // Get user's CLABE
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('clabe')
+            .eq('id', session.user.id)
+            .single();
+
+          if (!userError && userData?.clabe) {
+            // Set up deposit notifications
+            setupDepositNotifications(session.user.id, userData.clabe);
+          }
         } else {
           setIsAuthenticated(false);
         }
@@ -48,6 +68,26 @@ export default function RootLayout() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setIsAuthenticated(!!session);
+        
+        if (session?.user) {
+          // Set up push notifications
+          const token = await registerForPushNotificationsAsync();
+          if (token) {
+            await savePushToken(token.data);
+          }
+
+          // Get user's CLABE
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('clabe')
+            .eq('id', session.user.id)
+            .single();
+
+          if (!userError && userData?.clabe) {
+            // Set up deposit notifications
+            setupDepositNotifications(session.user.id, userData.clabe);
+          }
+        }
       }
     );
 
