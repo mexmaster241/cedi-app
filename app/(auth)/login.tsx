@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { colors } from '../constants/colors';
@@ -8,6 +8,8 @@ import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { Feather } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
  
 
 export default function LoginScreen() {
@@ -16,6 +18,8 @@ export default function LoginScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
  
 
   
@@ -45,7 +49,37 @@ export default function LoginScreen() {
       
       if (error) throw error;
       
-      // Navigation is handled globally in app/_layout.tsx when the session becomes authenticated
+      // After successful login, offer to enable biometric quick login
+      if (data.user && data.session) {
+        const compatible = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = compatible ? await LocalAuthentication.isEnrolledAsync() : false;
+        if (compatible && enrolled && data.session.refresh_token) {
+          console.log('[Biometric] Prompting user to enable biometrics');
+          Alert.alert(
+            'Usar biometría',
+            '¿Quieres usar Face ID/biometría para ingresar la próxima vez?',
+            [
+              { text: 'No', style: 'cancel' },
+              { 
+                text: 'Sí', 
+                onPress: async () => {
+                  try {
+                    console.log('[Biometric] Storing refresh token');
+                    await SecureStore.setItemAsync('biometricEnabled', 'true');
+                    await SecureStore.setItemAsync('supabaseRefreshToken', data.session.refresh_token);
+                    setBiometricEnabled(true);
+                    console.log('[Biometric] Stored. Enabled = true');
+                  } catch (e) {
+                    console.log('[Biometric] Error storing tokens', e);
+                  }
+                }
+              }
+            ]
+          );
+        } else {
+          console.log('[Biometric] Not compatible or no refresh token');
+        }
+      }
       
     } catch (error: any) {
       let errorTitle = 'Error';
@@ -76,6 +110,58 @@ export default function LoginScreen() {
     }
   };
 
+  const handleBiometricAuth = async () => {
+    try {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = compatible ? await LocalAuthentication.isEnrolledAsync() : false;
+      console.log('[Biometric] compatible:', compatible, 'enrolled:', enrolled, 'enabled state:', biometricEnabled);
+      if (!compatible || !enrolled) return;
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Autentícate para ingresar',
+        fallbackLabel: 'Ingresar con contraseña',
+      });
+      console.log('[Biometric] auth result:', result.success);
+      if (!result.success) return;
+
+      const refreshToken = await SecureStore.getItemAsync('supabaseRefreshToken');
+      console.log('[Biometric] has refresh token:', !!refreshToken);
+      if (!refreshToken) return;
+
+      const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+      console.log('[Biometric] setSession result error?', !!error, 'session?', !!data?.session);
+      if (error) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'No se pudo iniciar sesión con biometría',
+          position: 'bottom',
+          visibilityTime: 3000,
+        });
+      }
+      // On success, _layout will redirect
+    } catch {
+      // Silent fail to keep login available
+    }
+  };
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const compatible = await LocalAuthentication.hasHardwareAsync();
+        const enrolled = compatible ? await LocalAuthentication.isEnrolledAsync() : false;
+        setIsBiometricSupported(compatible && enrolled);
+        const enabled = await SecureStore.getItemAsync('biometricEnabled');
+        setBiometricEnabled(enabled === 'true');
+        if (enabled === 'true' && compatible && enrolled) {
+          // Auto-prompt biometrics if enabled
+          console.log('[Biometric] Auto-prompting');
+          handleBiometricAuth();
+        }
+      } catch {}
+    })();
+  }, []);
+
   return (
     <LinearGradient
       colors={['rgba(249,246,244,1)', 'rgba(249,246,244,1)', 'rgba(232,217,202,1)']}
@@ -83,7 +169,20 @@ export default function LoginScreen() {
     >
       <View style={styles.formContainer}>
         <Text style={styles.title}>Empieza tu camino</Text>
-        
+        {isBiometricSupported && (
+          <TouchableOpacity 
+            style={styles.biometricButton}
+            onPress={() => {
+              if (biometricEnabled) {
+                handleBiometricAuth();
+              } else {
+                Alert.alert('Biometría desactivada', 'Inicia sesión y habilítala cuando se te solicite.');
+              }
+            }}
+          >
+            <Ionicons name="scan-outline" size={32} color={colors.black} />
+          </TouchableOpacity>
+        )}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -254,6 +353,13 @@ const styles = StyleSheet.create({
     right: 12,
     top: '50%',
     transform: [{ translateY: -12 }],
+  },
+  biometricButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 8,
   },
   
 });

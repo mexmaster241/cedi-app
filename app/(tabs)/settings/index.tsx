@@ -6,10 +6,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors } from '@/app/constants/colors';
 import { supabase } from '@/app/src/db';
+import * as SecureStore from 'expo-secure-store';
 
 export default function UserPage() {
   const handleLogout = async () => {
     try {
+      // Clear any stored biometric flags/tokens so we don't try to reuse a revoked refresh token
+      try {
+        await SecureStore.deleteItemAsync('supabaseRefreshToken');
+        await SecureStore.deleteItemAsync('biometricEnabled');
+        await SecureStore.deleteItemAsync('supabaseAccessToken');
+      } catch (e) {
+        // Non-fatal
+      }
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       router.replace('/intro');
