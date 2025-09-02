@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { colors } from '../constants/colors';
@@ -8,122 +8,21 @@ import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { Feather } from '@expo/vector-icons';
-import * as LocalAuthentication from 'expo-local-authentication';
-import * as SecureStore from 'expo-secure-store';
+ 
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
-  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+ 
 
-  // Check biometric support and saved credentials
-  useEffect(() => {
-    (async () => {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      setIsBiometricSupported(compatible);
-      
-      // Check for saved credentials
-      const savedEmail = await SecureStore.getItemAsync('userEmail');
-      const hasSaved = savedEmail !== null;
-      setHasSavedCredentials(hasSaved);
-
-      // If device supports biometrics and has saved credentials, trigger authentication
-      if (compatible && hasSaved) {
-        // Small delay to ensure UI is ready
-        setTimeout(() => {
-          handleBiometricAuth();
-        }, 500);
-      }
-    })();
-  }, []);
-
-  const saveCredentials = async (email: string, password: string) => {
-    try {
-      await SecureStore.setItemAsync('userEmail', email);
-      await SecureStore.setItemAsync('userPassword', password);
-      setHasSavedCredentials(true);
-    } catch (error) {
-      console.error('Error saving credentials:', error);
-    }
-  };
-
-  const handleBiometricAuth = async () => {
-    try {
-      const biometricAuth = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Authenticate to login',
-        fallbackLabel: 'Enter password',
-      });
-
-      if (biometricAuth.success) {
-        const savedEmail = await SecureStore.getItemAsync('userEmail');
-        const savedPassword = await SecureStore.getItemAsync('userPassword');
-        
-        if (savedEmail && savedPassword) {
-          // Check network status
-          const networkState = await NetInfo.fetch();
-          if (!networkState.isConnected) {
-            Toast.show({
-              type: 'error',
-              text1: 'Error',
-              text2: 'No hay conexión a internet',
-              position: 'bottom',
-              visibilityTime: 3000,
-            });
-            return;
-          }
-
-          try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-              email: savedEmail,
-              password: savedPassword
-            });
-
-            if (error) throw error;
-            if (data.user) {
-              router.replace('/');
-            }
-          } catch (error: any) {
-            let errorTitle = 'Error';
-            let errorMessage = 'Hubo un error inesperado. Por favor intenta de nuevo.';
-            
-            switch(error.message) {
-              case 'Email not confirmed':
-                errorMessage = 'Por favor verifica tu cuenta de email';
-                break;
-              case 'Invalid login credentials':
-                errorMessage = 'Email o contraseña incorrectos';
-                break;
-              case 'User not found':
-                errorMessage = 'No existe una cuenta con este email';
-                break;
-            }
-            
-            Toast.show({
-              type: 'error',
-              text1: errorTitle,
-              text2: errorMessage,
-              position: 'bottom',
-              visibilityTime: 3000,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Biometric authentication failed',
-        position: 'bottom',
-        visibilityTime: 3000,
-      });
-    }
-  };
+  
 
   const handleLogin = async () => {
     try {
+      setIsSubmitting(true);
       setErrorMessage('');
       if (!email || !password) {
         setErrorMessage('Por favor ingresa tu email y contraseña');
@@ -146,26 +45,7 @@ export default function LoginScreen() {
       
       if (error) throw error;
       
-      if (data.user) {
-        // After successful login, ask user if they want to save credentials
-        if (!hasSavedCredentials) {
-          Alert.alert(
-            'Save Login',
-            'Would you like to enable biometric login for next time?',
-            [
-              {
-                text: 'No',
-                style: 'cancel'
-              },
-              {
-                text: 'Yes',
-                onPress: () => saveCredentials(trimmedEmail, password)
-              }
-            ]
-          );
-        }
-        router.replace('/');
-      }
+      // Navigation is handled globally in app/_layout.tsx when the session becomes authenticated
       
     } catch (error: any) {
       let errorTitle = 'Error';
@@ -190,6 +70,9 @@ export default function LoginScreen() {
         position: 'bottom',
         visibilityTime: 3000,
       });
+    }
+    finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -236,14 +119,7 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        {isBiometricSupported && hasSavedCredentials && (
-          <TouchableOpacity 
-            style={styles.biometricButton}
-            onPress={handleBiometricAuth}
-          >
-            <Ionicons name="scan-outline" size={32} color={colors.black} />
-          </TouchableOpacity>
-        )}
+        
 
         <View style={styles.signupContainer}>
           <Text style={styles.signupText}>¿No tienes cuenta? </Text>
@@ -255,10 +131,15 @@ export default function LoginScreen() {
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
-          style={styles.button}
+          style={[styles.button, isSubmitting && { opacity: 0.7 }]}
           onPress={handleLogin}
+          disabled={isSubmitting}
         >
-          <Text style={styles.buttonText}>Ingresa</Text>
+          {isSubmitting ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.buttonText}>Ingresa</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -374,13 +255,7 @@ const styles = StyleSheet.create({
     top: '50%',
     transform: [{ translateY: -12 }],
   },
-  biometricButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-    padding: 8,
-  },
+  
 });
 
 const toastStyles = StyleSheet.create({
