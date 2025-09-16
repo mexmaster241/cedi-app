@@ -1,4 +1,4 @@
-import { getAuthToken } from '../src/utils/jwt-utils';
+import { generateToken } from '../src/utils/jwt-utils';
 import axios, { AxiosError } from 'axios';
 
 const SPEI_API_BASE_URL = process.env.EXPO_PUBLIC_SPEI_API_URL
@@ -62,46 +62,35 @@ export class SpeiService {
   static async sendTransfer(payload: SpeiTransferPayload) {
     try {
       // console.log('🚀 Sending SPEI transfer:', {
-      //   url: `${SPEI_API_BASE_URL}/registraOrden`,
+      //   url: `${SPEI_API_BASE_URL}/transaction`,
       //   payload
       // });
 
-    const token = getAuthToken();
+      const token = generateToken();
 
-    const response = await axios.post(
-      `${SPEI_API_BASE_URL}/registraOrden`,
-      payload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+      const transaction = await axios.post(
+        `${SPEI_API_BASE_URL}transaction`,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
         }
-      }
-    );
+      );
 
-      // console.log('📥 SPEI response:', response.data);
+      // console.log('📥 SPEI transaction:', transaction?.data);
 
-      // Check for error response
-      if (!response.data?.return?.id) {
+      if (!transaction?.data?.trackingId || transaction?.data?.transactionStatus !== 'INITIALIZED') {
         return {
           success: false,
           error: 'Error en la validación SPEI'
         };
       }
 
-      const transferId = response.data.return.id;
-
-      // Solo validamos que el ID no sea 0, ya que sabemos que el formato es correcto
-      if (transferId === 0) {
-        return {
-          success: false,
-          error: 'Error en la transferencia SPEI'
-        };
-      }
-
       return {
         success: true,
-        data: response.data.return
+        data: transaction?.data
       };
 
     } catch (error) {

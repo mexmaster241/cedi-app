@@ -32,6 +32,7 @@ export async function createTransfer(formData: FormData): Promise<TransferResult
     const concept = formData.get('concept') as string
     const concept2 = formData.get('concept2') as string
     const beneficiaryName = formData.get('beneficiaryName') as string
+    const rfcCurp = (formData.get('rfcCurp') as string) || 'ND'
 
     // Validate account format based on type
     if (accountType === 'clabe' && recipientAccount.length !== 18) {
@@ -127,8 +128,8 @@ export async function createTransfer(formData: FormData): Promise<TransferResult
         nombreBeneficiario: beneficiaryName,
         nombreOrdenante: `${senderData.given_name} ${senderData.family_name}`.trim(),
         referenciaNumerica: Math.floor(100000 + Math.random() * 900000).toString(),
-        rfcCurpBeneficiario: "ND",
-        rfcCurpOrdenante: "ND",
+        rfcCurpBeneficiario: rfcCurp,
+        rfcCurpOrdenante: senderData.rfc || 'ND',
         tipoCuentaBeneficiario: accountType === 'tarjeta' ? "3" : "40",
         tipoCuentaOrdenante: "40",
         tipoPago: "1"
@@ -238,7 +239,8 @@ export async function createTransfer(formData: FormData): Promise<TransferResult
     }
 
     // Handle contact saving if requested
-    const saveAccount = formData.get('saveAccount') === 'on'
+    const saveAccountRaw = (formData.get('saveAccount') as string) || ''
+    const saveAccount = ['on', 'true', '1', 'yes'].includes(saveAccountRaw.toLowerCase?.() || saveAccountRaw)
     if (saveAccount) {
       try {
         await createContact({

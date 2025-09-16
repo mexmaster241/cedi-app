@@ -10,7 +10,7 @@ import { db } from '@/app/src/db';
 import Toast from 'react-native-toast-message';
 import React from 'react';
 import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
-import { createContact } from '@/app/constants/contacts';
+// Removed immediate contact creation; contact saving will be optional at confirm
 
 type AccountType = 'clabe' | 'tarjeta';
 
@@ -20,11 +20,13 @@ export default function NewRecipient() {
   const [account, setAccount] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   const [alias, setAlias] = useState('');
+  const [rfcCurp, setRfcCurp] = useState('');
   const [detectedBank, setDetectedBank] = useState<{ code: string; name: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [accountType, setAccountType] = useState<AccountType>('clabe');
   const [showBankModal, setShowBankModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [saveContact, setSaveContact] = useState(true);
   
   // For web fallback
   const isWeb = Platform.OS === 'web';
@@ -109,61 +111,33 @@ export default function NewRecipient() {
 
   const handleShowConfirmation = () => {
     if (!validateForm()) return;
-    setShowConfirmation(true);
+
+    const bankCode = accountType === 'clabe' ? account.substring(0, 3) : selectedBank;
+    const bankName = BANK_CODES[bankCode]?.name || 'Unknown Bank';
+    const institutionCode = BANK_TO_INSTITUTION[bankCode] || '90646';
+
+    router.push({
+      pathname: '/(tabs)/deposit/confirm',
+      params: {
+        recipientName: name,
+        accountNumber: account,
+        amount: params.amount,
+        bankCode,
+        bankName,
+        institutionCode,
+        accountType,
+        saveAccount: String(saveContact),
+        contactAlias: alias || name,
+        rfcCurp: rfcCurp?.trim().toUpperCase() || ''
+      }
+    });
   };
   
   const handleCancelConfirmation = () => {
     setShowConfirmation(false);
   };
 
-  const handleSubmit = async () => {
-    setIsLoading(true);
-    try {
-      const currentUser = await getCurrentUser();
-      if (!currentUser?.id) throw new Error('No user authenticated');
-
-      const bankCode = accountType === 'clabe' ? account.substring(0, 3) : selectedBank;
-      const bankName = BANK_CODES[bankCode]?.name || 'Unknown Bank';
-      const institutionCode = BANK_TO_INSTITUTION[bankCode] || '90646';
-
-      const result = await createContact({
-        name: name,
-        bank: bankName,
-        clabe: accountType === 'clabe' ? account : undefined,
-        card: accountType === 'tarjeta' ? account : undefined,
-        alias: alias || name,
-        userId: currentUser.id
-      });
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Error creating contact');
-      }
-
-      router.push({
-        pathname: '/(tabs)/deposit/confirm',
-        params: {
-          recipientId: result.data.id,
-          recipientName: result.data.name,
-          accountNumber: account,
-          amount: params.amount,
-          bankCode,
-          bankName,
-          institutionCode,
-          accountType
-        }
-      });
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'No se pudo guardar el contacto',
-        position: 'bottom',
-      });
-    } finally {
-      setIsLoading(false);
-      setShowConfirmation(false);
-    }
-  };
+  // No longer saving the contact immediately here; this is handled optionally after confirm
 
   return (
     <>
@@ -337,6 +311,29 @@ export default function NewRecipient() {
             />
           </View>
 
+          {/* RFC/CURP Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>RFC/CURP (opcional)</Text>
+            <TextInput
+              style={styles.input}
+              value={rfcCurp}
+              onChangeText={(t) => setRfcCurp(t.toUpperCase())}
+              placeholder="RFC del beneficiario"
+              autoCapitalize="characters"
+              placeholderTextColor={colors.darkGray}
+            />
+          </View>
+
+          {/* Save Contact Checkbox */}
+          <TouchableOpacity 
+            style={styles.checkboxRow}
+            onPress={() => setSaveContact((prev) => !prev)}
+            activeOpacity={0.7}
+          >
+            <Feather name={saveContact ? 'check-square' : 'square'} size={22} color={colors.black} />
+            <Text style={styles.checkboxLabel}>Guardar contacto</Text>
+          </TouchableOpacity>
+
           {/* Submit Button */}
           <TouchableOpacity 
             style={[
@@ -347,46 +344,12 @@ export default function NewRecipient() {
             disabled={isLoading}
           >
             <Text style={styles.submitButtonText}>
-              {isLoading ? 'Guardando...' : 'Continuar'}
+              {isLoading ? 'Procesando...' : 'Continuar'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Confirmation Modal */}
-        <Modal
-          visible={showConfirmation}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={handleCancelConfirmation}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, styles.confirmationModal]}>
-              <Text style={styles.bottomSheetTitle}>
-                Guardar contacto
-              </Text>
-              <Text style={styles.bottomSheetMessage}>
-                ¿Estás seguro que deseas guardar este contacto?
-              </Text>
-              <View style={styles.bottomSheetActions}>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.cancelButton]} 
-                  onPress={handleCancelConfirmation}
-                >
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.confirmButton]} 
-                  onPress={handleSubmit}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.confirmButtonText}>
-                    {isLoading ? 'Guardando...' : 'Guardar'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        {/* Confirmation Modal removed; flow goes directly to confirmar transferencia */}
       </SafeAreaView>
       <Toast 
         config={{
@@ -562,6 +525,17 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontFamily: 'ClashDisplay',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  checkboxLabel: {
+    marginLeft: 8,
+    fontFamily: 'ClashDisplay',
+    fontSize: 14,
+    color: colors.black,
   },
   bankDetected: {
     marginTop: 4,

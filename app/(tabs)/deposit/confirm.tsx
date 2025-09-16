@@ -129,7 +129,10 @@ export default function ConfirmDepositScreen() {
     bankCode,
     bankName,
     institutionCode,
-    accountType
+    accountType,
+    saveAccount,
+    contactAlias,
+    rfcCurp
   } = useLocalSearchParams<{
     amount: string;
     recipientId: string;
@@ -139,6 +142,9 @@ export default function ConfirmDepositScreen() {
     bankName: string;
     institutionCode: string;
     accountType: string;
+    saveAccount?: string;
+    contactAlias?: string;
+    rfcCurp?: string;
   }>();
 
   const [concept, setConcept] = useState('');
@@ -262,6 +268,15 @@ export default function ConfirmDepositScreen() {
       formData.append('concept', concept);
       if (concept2) formData.append('concept2', concept2);
       formData.append('beneficiaryName', recipientName);
+      if (typeof saveAccount !== 'undefined') {
+        formData.append('saveAccount', String(saveAccount));
+      }
+      if (contactAlias) {
+        formData.append('contactAlias', contactAlias);
+      }
+      if (rfcCurp) {
+        formData.append('rfcCurp', rfcCurp);
+      }
 
       if (accountType === 'tarjeta') {
         formData.append('institucionContraparte', finalInstitutionCode);
