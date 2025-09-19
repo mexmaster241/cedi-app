@@ -1,55 +1,67 @@
 import { colors } from '@/app/constants/colors';
 import { View, Text, StyleSheet } from 'react-native';
 import { useState, useEffect } from 'react';
-import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import { Skeleton } from './Skeleton';
 import React from 'react';
+import { useAuth } from '../context/AuthContext';
 
-export function BalanceCard() {
-  const [balance, setBalance] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+interface BalanceCardProps {
+  balance?: number;
+  teamId?: string | null;
+}
+
+export function BalanceCard({ balance: balanceProp, teamId }: BalanceCardProps) {
+  const { user, loading: authLoading } = useAuth();
+  const [userData, setUserData] = useState<any>(null);
+  const [teamBalance, setTeamBalance] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    async function fetchBalance() {
-      try {
-        const currentUser = await getCurrentUser();
-        const userEmail = currentUser?.email;
-        
-        if (!userEmail) {
-          throw new Error('No email found for user');
-        }
-
-        // Get user ID first
-        const userId = await db.users.getUserId(userEmail);
-        if (!userId) {
-          throw new Error('User ID not found');
-        }
-
-        // Then get full user data using ID
-        const user = await db.users.get(userId);
-        if (!user) {
-          console.error("User not found");
-          setBalance(0);
-          return;
-        }
-        
-        setBalance(user.balance ?? 0);
-      } catch (err) {
-        console.error("Error fetching balance:", err);
-        setBalance(0);
-      } finally {
-        setIsLoading(false);
+    async function fetchUserData() {
+      if (user) {
+        const data = await db.users.get(user.id);
+        setUserData(data);
       }
     }
-    fetchBalance();
-  }, []);
+    fetchUserData();
+  }, [user]);
 
-  // Format the balance with commas and two decimal places
+  useEffect(() => {
+    async function fetchTeamBalance() {
+      if (!teamId) {
+        setTeamBalance(null);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const teamOwnerId = await db.teams.getIdOwner(teamId);
+        if (!teamOwnerId) {
+          setTeamBalance(0);
+          return;
+        };
+
+        const ownerData = await db.users.get(teamOwnerId);
+        setTeamBalance(ownerData?.balance || 0);
+      } catch (error) {
+        console.error('Error fetching team balance:', error);
+        setTeamBalance(0);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTeamBalance();
+  }, [teamId]);
+
+  const isLoading = authLoading || loading;
+  const displayBalance = balanceProp ?? teamBalance ?? userData?.balance ?? 0;
+
   const formattedBalance = new Intl.NumberFormat('es-MX', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(balance);
+  }).format(displayBalance);
 
   return (
     <View style={styles.card}>

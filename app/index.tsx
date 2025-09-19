@@ -12,6 +12,7 @@ import { TopBar } from './components/TopBar';
 import { getCurrentUser, db } from './src/db';
 import { Skeleton } from './components/Skeleton';
 import { Feather } from '@expo/vector-icons';
+import { useAuth } from "./context/AuthContext";
 
 interface Movement {
   id: string;
@@ -29,6 +30,8 @@ interface Movement {
 SplashScreen.preventAutoHideAsync();
 
 export default function Index() {
+  const { user } = useAuth();
+  const [teamId, setTeamId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,26 +40,51 @@ export default function Index() {
   });
 
   useEffect(() => {
-    const fetchMovements = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        if (!currentUser?.id) return;
-        
-        const userMovements = await db.movements.list(currentUser.id);
-        const sortedMovements = userMovements.sort((a, b) => {
-          return new Date(b?.createdAt ?? 0).getTime() - 
-                 new Date(a?.createdAt ?? 0).getTime();
-        });
-        setMovements(sortedMovements.slice(0, 20));
-        setIsLoading(false);
-      } catch (err) {
-       
-        setIsLoading(false);
+    const fetchTeamInfo = async () => {
+      if (user) {
+        const memberships = await db.teams.getTeamMemberships(user.id);
+        if (memberships && memberships.length > 0) {
+          setTeamId(memberships[0].team_id);
+        } else {
+          // Handle case where user has no teams, fetch personal data
+          setTeamId(null); 
+        }
       }
     };
+    fetchTeamInfo();
+  }, [user]);
 
+  const fetchMovements = useCallback(async () => {
+    // Only fetch if we have a user and we have determined the team status
+    if (!user || (teamId === undefined && !user)) {
+        return;
+    };
+    
+    setIsLoading(true);
+    try {
+      let userMovements;
+      if (teamId) {
+        userMovements = await db.movements.teamList(teamId);
+      } else {
+        userMovements = await db.movements.list(user.id);
+      }
+      
+      const sortedMovements = (userMovements || []).sort((a, b) => {
+        return new Date(b?.created_at ?? 0).getTime() - new Date(a?.created_at ?? 0).getTime();
+      });
+      
+      setMovements(sortedMovements.slice(0, 20));
+    } catch (err) {
+      console.error("Error fetching movements", err);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, [user, teamId]);
+
+  useEffect(() => {
     fetchMovements();
-  }, []);
+  }, [fetchMovements]);
 
   const onLayoutRootView = useCallback(async () => {
     if (fontsLoaded) {
@@ -66,22 +94,8 @@ export default function Index() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try {
-      const currentUser = await getCurrentUser();
-      if (!currentUser?.id) return;
-      
-      const userMovements = await db.movements.list(currentUser.id);
-      const sortedMovements = userMovements.sort((a, b) => {
-        return new Date(b?.createdAt ?? 0).getTime() - 
-               new Date(a?.createdAt ?? 0).getTime();
-      });
-      setMovements(sortedMovements.slice(0, 20));
-    } catch (err) {
-      // Handle error if needed
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
+    await fetchMovements();
+  }, [fetchMovements]);
 
   if (!fontsLoaded) return null;
 
@@ -202,7 +216,7 @@ export default function Index() {
         ListHeaderComponent={
           <View style={{ alignItems: 'center', width: '100%' }}>
             <Header />
-            <BalanceCard />
+            <BalanceCard teamId={teamId} />
             <Text style={[styles.title, { alignSelf: 'center' }]}>Transacciones recientes</Text>
           </View>
         }

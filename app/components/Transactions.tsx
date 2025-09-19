@@ -1,8 +1,8 @@
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useState, useEffect } from 'react';
-import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import { Skeleton } from './Skeleton';
+import { useAuth } from '../context/AuthContext';
 
 interface Movement {
   id: string;
@@ -15,7 +15,12 @@ interface Movement {
   created_at?: string;
 }
 
-export function Transactions() {
+interface TransactionsProps {
+  teamId?: string | null;
+}
+
+export function Transactions({ teamId }: TransactionsProps) {
+  const { user, loading: authLoading } = useAuth();
   const [movements, setMovements] = useState<Movement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -23,30 +28,27 @@ export function Transactions() {
     let isMounted = true;
 
     async function fetchMovements() {
+      setIsLoading(true);
       try {
-        const currentUser = await getCurrentUser();
-        const userEmail = currentUser?.email;
-        
-        if (!userEmail) {
-          throw new Error('No email found for user');
-        }
+        let userMovements;
 
-        // Get user ID first
-        const userId = await db.users.getUserId(userEmail);
-        if (!userId) {
-          throw new Error('User ID not found');
+        if (teamId) {
+          // Fetch team movements
+          userMovements = await db.movements.teamList(teamId);
+        } else if (user?.id) {
+          // Fetch personal movements
+          userMovements = await db.movements.list(user.id);
+        } else {
+          userMovements = [];
         }
-
-        // Fetch movements using userId
-        const userMovements = await db.movements.list(userId);
         
         if (isMounted) {
-          const sortedMovements = userMovements.sort((a, b) => {
-            return new Date(b?.createdAt ?? 0).getTime() - 
-                   new Date(a?.createdAt ?? 0).getTime();
+          const sortedMovements = (userMovements || []).sort((a, b) => {
+            // @ts-ignore
+            return new Date(b?.created_at ?? 0).getTime() - new Date(a?.created_at ?? 0).getTime();
           });
 
-          setMovements(sortedMovements.slice(0, 20) as Movement[]); // Show last 20 movements
+          setMovements(sortedMovements.slice(0, 20) as Movement[]);
         }
       } catch (err) {
         console.error('Error fetching movements:', err);
@@ -57,9 +59,14 @@ export function Transactions() {
       }
     }
 
-    fetchMovements();
+    if (user || teamId) {
+        fetchMovements();
+    } else if (!authLoading) {
+        setIsLoading(false);
+    }
+
     return () => { isMounted = false; };
-  }, []);
+  }, [user, teamId, authLoading]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';

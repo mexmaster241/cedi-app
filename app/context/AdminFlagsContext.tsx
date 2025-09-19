@@ -1,7 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { useRouter } from 'expo-router'
+import { createContext, useContext, useState, ReactNode, useCallback, useRef } from 'react'
 import { db } from '../src/db'
 
 interface AdminFlags {
@@ -14,7 +13,7 @@ interface AdminFlagsContextType {
     flags: AdminFlags
     loading: boolean
     error: string | null
-    refreshFlags: () => Promise<void>
+    fetchFlags: () => Promise<AdminFlags>
 }
 
 const AdminFlagsContext = createContext<AdminFlagsContextType | undefined>(undefined)
@@ -22,17 +21,30 @@ const AdminFlagsContext = createContext<AdminFlagsContextType | undefined>(undef
 export function AdminFlagsProvider({ children }: { children: ReactNode }) {
     const [flags, setFlags] = useState<AdminFlags>({
         maintenanceMode: false,
-        transactions_enabled: false,
-        user_registration: false,
+        transactions_enabled: true, // Default to enabled until we fetch from DB
+        user_registration: true, // Default to enabled until we fetch from DB
     })
-    const [loading, setLoading] = useState(true)
+    const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const router = useRouter()
+    const [hasFetched, setHasFetched] = useState(false)
+    const isLoadingRef = useRef(false)
 
-    const fetchFlags = async () => {
+    const fetchFlags = useCallback(async (): Promise<AdminFlags> => {
+        // Reset loading ref to allow fresh fetches
+        isLoadingRef.current = false
+
+        // Allow fetching if not currently loading
+        if (isLoadingRef.current) {
+            // Return current flags if already loading
+            return flags
+        }
+
         try {
+            isLoadingRef.current = true
             setLoading(true)
-            // Fetch all settings and convert to flags object
+            setError(null)
+
+            // Fetch settings from database
             const settings = await db.settings.getSettings()
 
             // Convert settings array to flags object
@@ -41,9 +53,6 @@ export function AdminFlagsProvider({ children }: { children: ReactNode }) {
                 transactions_enabled: false,
                 user_registration: false,
             }
-
-            // Store the current state for comparison
-            const oldFlags = { ...flags }
 
             settings?.forEach((setting: { setting: string, status: string }) => {
                 switch (setting.setting) {
@@ -59,115 +68,28 @@ export function AdminFlagsProvider({ children }: { children: ReactNode }) {
                 }
             })
 
-            // Check if flags actually changed
-            if (JSON.stringify(oldFlags) !== JSON.stringify(flagsData)) {
-                // Force a re-render by creating a new object
-                setFlags({ ...flagsData })
-                // Store the update in localStorage to prevent duplicate processing
-                localStorage.setItem('lastSettingsUpdate', JSON.stringify({
-                    type: 'UPDATE',
-                    table: 'settings',
-                    schema: 'public',
-                    record: flagsData
-                }))
-            }
-            setError(null)
+            setFlags(flagsData)
+            setHasFetched(true)
+            return flagsData
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch flags')
             console.error('Error fetching admin flags:', err)
+            // Return safe defaults if there's an error
+            const defaultFlags = {
+                maintenanceMode: false,
+                transactions_enabled: true,
+                user_registration: true,
+            }
+            setFlags(defaultFlags)
+            return defaultFlags
         } finally {
+            isLoadingRef.current = false
             setLoading(false)
         }
-    }
-
-    const refreshFlags = async () => {
-        await fetchFlags()
-    }
-
-    useEffect(() => {
-        // Initial fetch
-        const loadFlags = async () => {
-            setLoading(true)
-            try {
-                await fetchFlags()
-            } catch (err) {
-                console.error('Error loading initial flags:', err)
-            } finally {
-                setLoading(false)
-            }
-        }
-
-        loadFlags()
-
-        // Generate a unique channel name for this tab
-        const channelName = `settings_changes_${Math.random().toString(36).slice(2, 11)}`
-
-        // Set up real-time subscription
-        const channel = supabase
-            .channel(channelName)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'settings'
-                },
-                async (payload) => {
-                    // Check if this is our own update
-                    const lastUpdate = localStorage.getItem('lastSettingsUpdate')
-                    if (lastUpdate === JSON.stringify(payload)) {
-                        localStorage.removeItem('lastSettingsUpdate')
-                        return
-                    }
-
-                    console.log('Settings updated:', payload)
-                    // Refresh flags when settings change
-                    window.location.reload()
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'settings'
-                },
-                async (payload) => {
-                    // Check if this is our own insert
-                    const lastUpdate = localStorage.getItem('lastSettingsUpdate')
-                    if (lastUpdate === JSON.stringify(payload)) {
-                        localStorage.removeItem('lastSettingsUpdate')
-                        return
-                    }
-
-                    console.log('Settings inserted:', payload)
-                    await fetchFlags()
-                }
-            )
-            .subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log('Successfully subscribed to settings changes on channel:', channelName)
-                } else {
-                    console.error('Failed to subscribe to settings changes:', status)
-                }
-            })
-
-        // Also set up auth state change listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session) {
-                // Reload flags when user logs in
-                loadFlags()
-            }
-        })
-
-        return () => {
-            subscription.unsubscribe()
-            supabase.removeChannel(channel)
-        }
-    }, [router])
+    }, [flags])
 
     return (
-        <AdminFlagsContext.Provider value={{ flags, loading, error, refreshFlags }}>
+        <AdminFlagsContext.Provider value={{ flags, loading, error, fetchFlags }}>
             {children}
         </AdminFlagsContext.Provider>
     )

@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useRouter, useSegments } from 'expo-router';
 import { supabase } from '@/app/src/db';
 import { SecurityProvider } from './context/SecurityContext';
+import { AuthProvider } from './context/AuthContext';
  
 
 // Keep splash screen visible while we fetch resources
@@ -82,16 +83,18 @@ export default function RootLayout() {
 
   return (
     <SecurityProvider>
-      <Stack 
-        screenOptions={{ 
-          headerShown: false,
-          contentStyle: {
-            backgroundColor: 'transparent'
-          }
-        }}
-      >
-        <Slot />
-      </Stack>
+      <AuthProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: {
+              backgroundColor: 'transparent'
+            }
+          }}
+        >
+          <Slot />
+        </Stack>
+      </AuthProvider>
     </SecurityProvider>
   );
 }
