@@ -6,42 +6,43 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import { useState, useEffect } from 'react';
 import Toast from 'react-native-toast-message';
 import React from 'react';
 import { Skeleton } from '@/app/components/Skeleton';
+import { useAuth } from '@/app/context/AuthContext';
 
 export default function Card() {
+  const { user, loading: authLoading } = useAuth();
   const [clabe, setClabe] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchClabe() {
+      if (authLoading) return;
+      if (!user) {
+        setIsLoading(false);
+        setClabe("");
+        return;
+      }
+
+      setIsLoading(true);
       try {
-        const currentUser = await getCurrentUser();
-        const userEmail = currentUser?.email;
-        
-        if (!userEmail) {
-          throw new Error('No email found for user');
+        const memberships = await db.teams.getTeamMemberships(user.id);
+        let targetUserId = user.id;
+
+        // If user is part of a team, get the CLABE from the team's owner
+        if (memberships && memberships.length > 0) {
+          const ownerId = await db.teams.getIdOwner(memberships[0].team_id);
+          if (ownerId) {
+            targetUserId = ownerId;
+          }
         }
 
-        // Get user ID first
-        const userId = await db.users.getUserId(userEmail);
-        if (!userId) {
-          throw new Error('User ID not found');
-        }
+        const userData = await db.users.get(targetUserId);
+        setClabe(userData?.clabe ?? "");
 
-        // Then get full user data using ID
-        const user = await db.users.get(userId);
-        if (!user) {
-          console.error("User not found");
-          setClabe("");
-          return;
-        }
-        
-        setClabe(user.clabe ?? "");
       } catch (err) {
         console.error("Error fetching CLABE:", err);
         setClabe("");
@@ -50,9 +51,10 @@ export default function Card() {
       }
     }
     fetchClabe();
-  }, []);
+  }, [user, authLoading]);
 
   const copyToClipboard = async () => {
+    if (!clabe) return;
     await Clipboard.setStringAsync(clabe);
     Toast.show({
       type: 'success',

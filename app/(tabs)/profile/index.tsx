@@ -18,11 +18,12 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '@/app/constants/colors';
-import { getCurrentUser, db, supabase } from '@/app/src/db';
+import { db, supabase } from '@/app/src/db';
 import { Skeleton } from '@/app/components/Skeleton';
 import Toast from 'react-native-toast-message';
 import QRCodeSVG from 'react-native-qrcode-svg';
 import * as Clipboard from 'expo-clipboard';
+import { useAuth } from '@/app/context/AuthContext';
 
 // OTP Input Component
 const OTPInput = ({ 
@@ -306,9 +307,10 @@ interface DisableMFADialogProps {
   onClose: () => void;
   onSuccess: () => void;
   userId: string;
+  userEmail: string;
 }
 
-const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId }: DisableMFADialogProps) => {
+const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId, userEmail }: DisableMFADialogProps) => {
   const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -347,11 +349,10 @@ const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId }: DisableMFAD
       if (unenrollError) throw unenrollError;
 
       // Update user MFA status
-      const user = await getCurrentUser();
-      if (user) {
+      if (userEmail) {
         await db.users.createOrUpdate({
           id: userId,
-          email: user.email!,
+          email: userEmail,
           mfa_enabled: false
         });
       }
@@ -425,26 +426,52 @@ interface UserProfile {
   email: string;
   company: string;
   mfa_enabled: boolean;
+  team_name?: string;
 }
 
 export default function ProfileScreen() {
+  const { user, loading: authLoading } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showMFASetup, setShowMFASetup] = useState(false);
   const [showDisableMFA, setShowDisableMFA] = useState(false);
 
-  const loadUserProfile = async () => {
+  const loadUserProfile = useCallback(async () => {
+    if (authLoading || !user) {
+      setIsLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    
+    setIsLoading(true);
     try {
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        const userData = await db.users.getByEmail(currentUser.email!);
+      const memberships = await db.teams.getTeamMemberships(user.id);
+      let targetUserId = user.id;
+      let teamName: string | undefined;
+
+      if (memberships && memberships.length > 0) {
+        const teamId = memberships[0].team_id;
+        // The data is an object, but TypeScript infers it as an array.
+        // We cast to `any` to bypass the type error while maintaining functionality.
+        const teamData: any = memberships[0].team;
+        teamName = teamData.name;
+        const ownerId = await db.teams.getIdOwner(teamId);
+        if (ownerId) {
+          targetUserId = ownerId;
+        }
+      }
+
+      const userData = await db.users.get(targetUserId);
+
+      if (userData) {
         setUserProfile({
-          id: userData.id,
-          full_name: userData.given_name + ' ' + userData.family_name || 'Usuario',
-          email: userData.email || currentUser.email!,
+          id: user.id, // Keep the logged-in user's ID for actions
+          full_name: `${userData.given_name || ''} ${userData.family_name || ''}`.trim() || 'Usuario',
+          email: userData.email,
           company: userData.company_name || 'Empresa no especificada',
-          mfa_enabled: userData.mfa_enabled || false
+          mfa_enabled: userData.mfa_enabled || false,
+          team_name: teamName,
         });
       }
     } catch (error) {
@@ -453,16 +480,16 @@ export default function ProfileScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [user, authLoading]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadUserProfile();
-  }, []);
+  }, [loadUserProfile]);
 
   useEffect(() => {
     loadUserProfile();
-  }, []);
+  }, [loadUserProfile]);
 
   const renderSkeletonContent = () => (
     <>
@@ -519,6 +546,13 @@ export default function ProfileScreen() {
               <Text style={styles.label}>Empresa</Text>
               <Text style={styles.value}>{userProfile.company}</Text>
             </View>
+
+            {userProfile.team_name && (
+              <View style={styles.infoItem}>
+                <Text style={styles.label}>Equipo</Text>
+                <Text style={styles.value}>{userProfile.team_name}</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.securityContainer}>
@@ -590,6 +624,7 @@ export default function ProfileScreen() {
               onClose={() => setShowDisableMFA(false)} 
               onSuccess={loadUserProfile}
               userId={userProfile.id}
+              userEmail={userProfile.email}
             />
           </>
         )}
