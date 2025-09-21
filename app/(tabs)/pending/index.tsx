@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, RefreshControl, ActivityIndicator, To
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors } from '@/app/constants/colors';
+import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
 import { db, supabase } from '@/app/src/db';
 import { useAuth } from '@/app/context/AuthContext';
 import { Feather } from '@expo/vector-icons';
@@ -19,10 +20,12 @@ interface PendingMovementItem {
   status: string;
   counterparty_name?: string;
   counterparty_clabe?: string;
+  counterparty_bank?: string;
   counterparty_rfc_curp?: string;
   concept?: string;
   concept2?: string;
   created_at?: string;
+  metadata?: any;
 }
 
 // OTP Input (same pattern as confirm.tsx)
@@ -169,25 +172,76 @@ export default function PendingMovementsScreen() {
       const formData = new FormData();
       formData.append('userId', selected.user_id);
       formData.append('amount', String(selected.amount));
-      formData.append('accountType', 'clabe');
-      formData.append('clabe', selected.counterparty_clabe);
+      const isCard = selected.counterparty_clabe && selected.counterparty_clabe.length === 16;
+      if (isCard) {
+        formData.append('accountType', 'tarjeta');
+        formData.append('tarjeta', selected.counterparty_clabe!);
+        // Try to include institution code for card transfers
+        const metaInstitution = selected.metadata?.institutionCode || selected.metadata?.institucionContraparte;
+        if (metaInstitution) {
+          formData.append('institucionContraparte', String(metaInstitution));
+        } else if (selected.counterparty_bank) {
+          const bankEntry = Object.values(BANK_CODES).find(b => b.name.toUpperCase() === selected.counterparty_bank!.toUpperCase());
+          const inst = bankEntry ? BANK_TO_INSTITUTION[bankEntry.code] : undefined;
+          if (inst) formData.append('institucionContraparte', inst);
+        }
+      } else {
+        formData.append('accountType', 'clabe');
+        formData.append('clabe', selected.counterparty_clabe!);
+      }
       formData.append('concept', selected.concept || '');
-      if (selected.concept2) formData.append('concept2', selected.concept2);
       formData.append('beneficiaryName', selected.counterparty_name || '');
       if (selected.counterparty_rfc_curp) formData.append('rfcCurp', selected.counterparty_rfc_curp);
 
       const result = await createTransfer(formData);
       if (!result.success) {
-        const msg = result.error || 'No se pudo crear la transferencia';
-        Toast.show({ type: 'error', text1: 'Error', text2: msg.includes('Insufficient') ? 'Fondos insuficientes' : msg });
+        const msg = (result.error || '').toString().toLowerCase();
+        const fondosInsuficientes = msg.includes('insufficient');
+        Toast.show({ type: 'error', text1: 'Error', text2: fondosInsuficientes ? 'Fondos insuficientes' : 'No se pudo crear la transferencia' });
         return;
       }
 
       await db.movements.deletePendingMovement(selected.id);
+      const amountNum = Number(selected.amount || 0);
+      const finalAmountNum = Number((selected.final_amount ?? selected.amount) || 0);
+      const commissionNum = Math.max(0, finalAmountNum - amountNum);
+      let bankName = 'CEDI';
+      if (selected.counterparty_clabe) {
+        const isCardNum = selected.counterparty_clabe.length === 16;
+        if (isCardNum) {
+          bankName = selected.counterparty_bank || 'Unknown Bank';
+        } else if (!selected.counterparty_clabe.startsWith('6461805278')) {
+          const bankCode = selected.counterparty_clabe.substring(0, 3);
+          bankName = (BANK_CODES as any)[bankCode]?.name || 'Unknown Bank';
+        }
+      }
+
+      router.replace({
+        pathname: '/(tabs)/deposit/success',
+        params: {
+          movementData: JSON.stringify({
+            clave_rastreo: result.clave_rastreo,
+            createdAt: new Date().toISOString(),
+            beneficiaryName: selected.counterparty_name || '',
+            bankName,
+            direction: 'OUTBOUND',
+            amount: amountNum,
+            commission: commissionNum,
+            finalAmount: finalAmountNum,
+            counterpartyBank: bankName,
+            ...(selected.counterparty_clabe && selected.counterparty_clabe.length === 16
+              ? { counterpartyCard: selected.counterparty_clabe }
+              : { counterpartyClabe: selected.counterparty_clabe }),
+            concept: selected.concept,
+            status: 'COMPLETED',
+          })
+        }
+      });
+
       Toast.show({ type: 'success', text1: 'Aprobado', text2: 'Transferencia creada' });
       setShowModal(false); setSelected(null); setMfaCode(''); setStep('details'); loadData(true);
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: 'Error', text2: e?.message || 'No se pudo aprobar' });
+      Toast.show({ type: 'error', text1: 'Error', text2: 'No se pudo aprobar la transferencia' });
     } finally { setIsLoading(false); }
   };
 
@@ -249,7 +303,6 @@ export default function PendingMovementsScreen() {
               <View style={styles.modalBody}>
                 <Text style={styles.modalMessage}>Beneficiario: {selected.counterparty_name || '-'}</Text>
                 <Text style={styles.modalMessage}>Concepto: {selected.concept || '-'}</Text>
-                <Text style={styles.modalMessage}>Concepto 2: {selected.concept2 || '-'}</Text>
                 <Text style={styles.modalMessage}>Monto: ${(selected.final_amount ?? selected.amount ?? 0).toFixed(2)}</Text>
                 <Text style={styles.modalMessage}>Estatus: {selected.status}</Text>
                 {canApprove ? (
@@ -257,7 +310,7 @@ export default function PendingMovementsScreen() {
                     <Text style={styles.primaryBtnText}>Aprobar</Text>
                   </TouchableOpacity>
                 ) : (
-                  <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 12 }]}>No tienes permisos para aprobar. Solo lectura.</Text>
+                  <></>
                 )}
               </View>
             )}
@@ -270,8 +323,12 @@ export default function PendingMovementsScreen() {
                   <Feather name="clipboard" size={20} color={colors.black} />
                   <Text style={styles.pasteButtonText}>Pegar código</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.primaryBtn, (mfaCode.length !== 6) && { backgroundColor: colors.lightGray }]} onPress={handleApproveWithMfa} disabled={mfaCode.length !== 6}>
-                  <Text style={styles.primaryBtnText}>Confirmar</Text>
+                <TouchableOpacity style={[styles.primaryBtn, ((mfaCode.length !== 6) || isLoading) && { backgroundColor: colors.lightGray }]} onPress={handleApproveWithMfa} disabled={mfaCode.length !== 6 || isLoading}>
+                  {isLoading ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Confirmar</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             )}
@@ -279,7 +336,32 @@ export default function PendingMovementsScreen() {
           </View>
         </Modal>
 
-        <Toast />
+        <Toast 
+          config={{
+            error: (props) => (
+              <View style={toastStyles.container}>
+                <View style={toastStyles.iconContainer}>
+                  <Feather name="alert-circle" size={24} color={colors.black} />
+                </View>
+                <View style={toastStyles.textContainer}>
+                  <Text style={toastStyles.title}>{props.text1}</Text>
+                  <Text style={toastStyles.message}>{props.text2}</Text>
+                </View>
+              </View>
+            ),
+            success: (props) => (
+              <View style={toastStyles.container}>
+                <View style={[toastStyles.iconContainer, { backgroundColor: colors.black }]}>
+                  <Feather name="check" size={24} color={colors.white} />
+                </View>
+                <View style={toastStyles.textContainer}>
+                  <Text style={toastStyles.title}>{props.text1}</Text>
+                  <Text style={toastStyles.message}>{props.text2}</Text>
+                </View>
+              </View>
+            )
+          }}
+        />
       </SafeAreaView>
     </>
   );
@@ -314,4 +396,33 @@ const otpStyles = StyleSheet.create({
   cell: { width: 48, height: 56, fontSize: 24, borderWidth: 1.5, borderColor: colors.beige, borderRadius: 12, textAlign: 'center', fontFamily: 'ClashDisplay', color: colors.black, backgroundColor: colors.white, paddingVertical: 8 },
   focusedCell: { borderColor: colors.black, borderWidth: 2, backgroundColor: colors.beige },
   filledCell: { backgroundColor: colors.beige },
+});
+
+const toastStyles = StyleSheet.create({
+  container: {
+    width: '90%',
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    marginBottom: 16,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.beige,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  textContainer: { flex: 1 },
+  title: { fontFamily: 'ClashDisplay', fontSize: 16, color: colors.black, marginBottom: 4 },
+  message: { fontFamily: 'ClashDisplay', fontSize: 14, color: colors.darkGray },
 });
