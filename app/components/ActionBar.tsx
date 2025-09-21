@@ -92,10 +92,24 @@ export function ActionBar() {
     router.push('/card');
   };
 
+  const handlePendingPress = () => {
+    if (pathname !== '/(tabs)/pending') {
+      router.push('/(tabs)/pending');
+    }
+  };
+
+  const handleDispersionsPress = () => {
+    if (pathname !== '/(tabs)/dispersions') {
+      router.push('/(tabs)/dispersions');
+    }
+  };
+
   const handleEnableMfa = () => {
     Linking.openURL('https://soycedi.com/dashboard');
     bottomSheetRef.current?.close();
   };
+
+  const isActive = (target: string) => pathname === target;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -107,7 +121,15 @@ export function ActionBar() {
           <AntDesign 
             name="home" 
             size={24} 
-            color={pathname === '/' ? colors.black : colors.lightGray} 
+            color={isActive('/') ? colors.black : colors.lightGray} 
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabButton} onPress={handlePendingPress}>
+          <Feather 
+            name="send" 
+            size={24} 
+            color={isActive('/(tabs)/pending') ? colors.black : colors.lightGray} 
           />
         </TouchableOpacity>
 
@@ -115,6 +137,14 @@ export function ActionBar() {
           <View style={styles.plusButton}>
             <Ionicons name="add" size={32} color={colors.white} />
           </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.tabButton} onPress={handleDispersionsPress}>
+          <Feather 
+            name="users" 
+            size={24} 
+            color={isActive('/(tabs)/dispersions') ? colors.black : colors.lightGray} 
+          />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.tabButton} onPress={handleCardPress}>
