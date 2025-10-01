@@ -41,7 +41,7 @@ interface ContactItemProps {
 const ContactItem: React.FC<ContactItemProps> = ({ contact, onSelect, onDelete }) => {
   return (
     <View style={styles.recipientItem}>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.recipientContent}
         onPress={() => onSelect(contact)}
       >
@@ -60,8 +60,8 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onSelect, onDelete }
         </View>
         <Feather name="chevron-right" size={24} color={colors.lightGray} />
       </TouchableOpacity>
-      
-      <TouchableOpacity 
+
+      <TouchableOpacity
         style={styles.deleteIconButton}
         onPress={() => {
           onDelete(contact);
@@ -81,10 +81,10 @@ export default function SelectRecipientScreen() {
   const [userCommission, setUserCommission] = useState(5.80); // Default fallback
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  
+
   // Bottom sheet reference
   const bottomSheetRef = useRef<BottomSheet>(null);
-  
+
   // Bottom sheet snap points
   const snapPoints = useMemo(() => ['30%'], []);
 
@@ -95,14 +95,12 @@ export default function SelectRecipientScreen() {
     try {
       setIsLoading(true);
       const currentUser = await getCurrentUser();
-      const userEmail = currentUser?.email;
-      
-      if (!userEmail) {
-        throw new Error('No email found for user');
+      let userId = currentUser?.id;
+
+      if (currentUser?.user_metadata?.team_id) {
+        userId = await db.teams.getIdOwner(currentUser?.user_metadata?.team_id);
       }
 
-      // Get user ID first
-      const userId = await db.users.getUserId(userEmail);
       if (!userId) {
         throw new Error('User ID not found');
       }
@@ -153,7 +151,7 @@ export default function SelectRecipientScreen() {
       }
 
       const result = await deleteContact(contactId, currentUser.id);
-      
+
       if (result.success) {
         // Refresh contacts after deletion
         await fetchContacts();
@@ -234,7 +232,7 @@ export default function SelectRecipientScreen() {
       <StatusBar style="dark" translucent backgroundColor="transparent" />
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
           >
@@ -244,7 +242,7 @@ export default function SelectRecipientScreen() {
         </View>
 
         <View style={styles.content}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.newRecipientButton}
             onPress={handleNewRecipient}
           >
@@ -299,14 +297,14 @@ export default function SelectRecipientScreen() {
                 ¿Estás seguro que deseas eliminar este contacto?
               </Text>
               <View style={styles.bottomSheetActions}>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.cancelButton]} 
+                <TouchableOpacity
+                  style={[styles.bottomSheetButton, styles.cancelButton]}
                   onPress={handleCancelDelete}
                 >
                   <Text style={styles.cancelButtonText}>Cancelar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.bottomSheetButton, styles.deleteConfirmButton]} 
+                <TouchableOpacity
+                  style={[styles.bottomSheetButton, styles.deleteConfirmButton]}
                   onPress={() => {
                     contactToDelete && handleDeleteContact(contactToDelete.id);
                   }}

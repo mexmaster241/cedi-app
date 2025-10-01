@@ -39,22 +39,22 @@ const SECONDARY_INSTITUTIONS: { [key: string]: string } = {
 const getInstitutionCode = (bankCode: string) => {
   const primaryCode = BANK_TO_INSTITUTION[bankCode];
   if (primaryCode) return primaryCode;
-  
+
   const secondaryCode = SECONDARY_INSTITUTIONS[bankCode];
   if (secondaryCode) return secondaryCode;
-  
+
   return "90646";
 };
 
 // OTP Input Component
-const OTPInput = ({ 
-  value, 
-  onChange, 
-  cellCount = 6 
-}: { 
-  value: string; 
-  onChange: (value: string) => void; 
-  cellCount?: number; 
+const OTPInput = ({
+  value,
+  onChange,
+  cellCount = 6
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  cellCount?: number;
 }) => {
   const inputRefs = useRef<Array<TextInput | null>>([]);
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -81,7 +81,7 @@ const OTPInput = ({
 
     const newValue = value.substring(0, index) + keyValue + value.substring(index + 1);
     onChange(newValue);
-    
+
     if (index < cellCount - 1 && keyValue !== '') {
       inputRefs.current[index + 1]?.focus();
     }
@@ -121,10 +121,10 @@ const formatNumber = (num: number | string) => {
 };
 
 export default function ConfirmDepositScreen() {
-  const { 
-    amount, 
+  const {
+    amount,
     recipientId,
-    recipientName, 
+    recipientName,
     accountNumber,
     bankCode,
     bankName,
@@ -154,10 +154,10 @@ export default function ConfirmDepositScreen() {
   const [mfaCode, setMfaCode] = useState('');
   const [showMfaModal, setShowMfaModal] = useState(false);
   const [clipboardCode, setClipboardCode] = useState('');
-  
+
   // Bottom sheet reference
   const bottomSheetRef = useRef<BottomSheet>(null);
-  
+
   // Bottom sheet snap points
   const snapPoints = useMemo(() => ['50%'], []);
 
@@ -233,7 +233,15 @@ export default function ConfirmDepositScreen() {
     try {
       setIsLoading(true);
       const currentUser = await getCurrentUser();
-      if (!currentUser?.id) throw new Error('No authenticated user');
+      let userId = currentUser?.id;
+      let isMember = false;
+
+      if (currentUser?.user_metadata?.team_id) {
+        userId = await db.teams.getIdOwner(currentUser?.user_metadata?.team_id);
+        isMember = await db.teams.hasRole(currentUser?.id, currentUser?.user_metadata?.team_id, 'MEMBER');
+      }
+
+      if (!userId) throw new Error('No authenticated user');
 
       // First verify MFA
       const { data: factorsData } = await supabase.auth.mfa.listFactors();
@@ -261,7 +269,7 @@ export default function ConfirmDepositScreen() {
       const finalInstitutionCode = getInstitutionCode(bankCode);
 
       const formData = new FormData();
-      formData.append('userId', currentUser.id);
+      formData.append('userId', userId);
       formData.append('amount', amount);
       formData.append('accountType', accountType);
       formData.append(accountNumber.length === 16 ? 'tarjeta' : 'clabe', accountNumber);
@@ -282,40 +290,98 @@ export default function ConfirmDepositScreen() {
         formData.append('institucionContraparte', finalInstitutionCode);
       }
 
-      const result = await createTransfer(formData);
+      if (isMember) {
+        const appliedCommission = isInternalTransfer ? 0 : userCommission
+        const isSaveAccount = ['on', 'true', '1', 'yes'].includes(saveAccount?.toString().toLowerCase?.() || saveAccount?.toString() || '')
 
-      if (result.success) {
+        await db.movements.createPendingMovement(
+          userId,
+          parseFloat(amount),
+          appliedCommission,
+          (parseFloat(amount) + appliedCommission),
+          recipientName,
+          rfcCurp,
+          (
+            accountType === 'clabe'
+              ? bankName
+              : (BANK_CODES[finalInstitutionCode]?.name || finalInstitutionCode)
+          ),
+          accountNumber,
+          concept,
+          concept2,
+          {
+            account_type: accountType,
+            contact_alias: contactAlias,
+            save_account: isSaveAccount,
+            created_by: currentUser?.id,
+            latitude: 0,
+            longitude: 0,
+            recipient_account: accountNumber,
+            bank_code:
+              accountType === 'tarjeta'
+                ? institutionCode
+                : (accountNumber?.substring(0, 3) || undefined)
+          }
+        )
+
+        if (isSaveAccount && contactAlias) {
+          await db.contacts.createContactWithValidation({
+            name: recipientName,
+            bank: bankName,
+            ...(accountType === 'clabe' ? { clabe: accountNumber } : { card: accountNumber }),
+            alias: contactAlias,
+            rfc_curp: rfcCurp,
+            userId: userId
+          })
+        }
+
         Toast.show({
           type: 'success',
-          text1: 'Transferencia completada',
-          text2: result.message || 'La transferencia se ha realizado correctamente',
+          text1: 'Movimiento pendiente creado',
+          text2: 'La transferencia ha sido enviada para aprobación.',
           position: 'bottom',
           visibilityTime: 3000,
         });
 
         router.replace({
-          pathname: '/(tabs)/deposit/processing',
-          params: {
-            movementData: JSON.stringify({
-              clave_rastreo: result.clave_rastreo,
-              amount,
-              commission: appliedCommission,
-              finalAmount: amount + appliedCommission,
-              recipientName,
-              beneficiaryName: recipientName,
-              bankName: bankName,
-              counterpartyClabe: accountNumber,
-              counterpartyBank: bankName,
-              concept,
-              concept2,
-              status: 'COMPLETED',
-              createdAt: new Date().toISOString(),
-              direction: 'OUTBOUND'
-            })
-          }
+          pathname: '/(tabs)/pending',
         });
       } else {
-        throw new Error(result.error || 'Error en la transferencia');
+        const result = await createTransfer(formData);
+
+        if (result.success) {
+          Toast.show({
+            type: 'success',
+            text1: 'Transferencia completada',
+            text2: result.message || 'La transferencia se ha realizado correctamente',
+            position: 'bottom',
+            visibilityTime: 3000,
+          });
+
+          router.replace({
+            pathname: '/(tabs)/deposit/processing',
+            params: {
+              movementData: JSON.stringify({
+                clave_rastreo: result.clave_rastreo,
+                amount,
+                commission: appliedCommission,
+                finalAmount: amount + appliedCommission,
+                recipientName,
+                beneficiaryName: recipientName,
+                bankName: bankName,
+                counterpartyClabe: accountNumber,
+                counterpartyBank: bankName,
+                concept,
+                concept2,
+                status: 'COMPLETED',
+                createdAt: new Date().toISOString(),
+                direction: 'OUTBOUND'
+              })
+            }
+          });
+        } else {
+          throw new Error(result.error || 'Error en la transferencia');
+        }
       }
     } catch (error) {
       console.error('Error in transfer:', error);
@@ -337,7 +403,7 @@ export default function ConfirmDepositScreen() {
       <StatusBar style="dark" translucent backgroundColor="transparent" />
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
           >
@@ -396,7 +462,7 @@ export default function ConfirmDepositScreen() {
             />
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
               styles.confirmButton,
               isLoading && styles.confirmButtonDisabled
@@ -424,7 +490,7 @@ export default function ConfirmDepositScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Confirmar transferencia</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => {
                   setShowMfaModal(false);
                   setMfaCode('');
@@ -439,13 +505,13 @@ export default function ConfirmDepositScreen() {
               <Text style={styles.modalMessage}>
                 Ingresa el código de verificación de 6 dígitos de tu aplicación de autenticación
               </Text>
-              
-              <OTPInput 
-                value={mfaCode} 
+
+              <OTPInput
+                value={mfaCode}
                 onChange={setMfaCode}
               />
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.pasteButton}
                 onPress={handlePasteCode}
               >
@@ -453,7 +519,7 @@ export default function ConfirmDepositScreen() {
                 <Text style={styles.pasteButtonText}>Pegar código</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.confirmButton,
                   (mfaCode.length !== 6 || isLoading) && styles.buttonDisabled
@@ -472,7 +538,7 @@ export default function ConfirmDepositScreen() {
         </View>
       </Modal>
 
-      <Toast 
+      <Toast
         config={{
           error: (props) => (
             <View style={toastStyles.container}>
