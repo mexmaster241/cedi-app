@@ -21,14 +21,12 @@ export default function DepositScreen() {
     async function fetchBalance() {
       try {
         const currentUser = await getCurrentUser();
-        const userEmail = currentUser?.email;
-        
-        if (!userEmail) {
-          throw new Error('No email found for user');
+        let userId = currentUser?.id;
+
+        if (currentUser?.user_metadata?.team_id) {
+          userId = await db.teams.getIdOwner(currentUser?.user_metadata?.team_id);
         }
 
-        // Get user ID first
-        const userId = await db.users.getUserId(userEmail);
         if (!userId) {
           throw new Error('User ID not found');
         }
@@ -40,7 +38,7 @@ export default function DepositScreen() {
           setUserBalance(0);
           return;
         }
-        
+
         setUserBalance(user.balance ?? 0);
       } catch (err) {
         console.error("Error fetching balance:", err);
@@ -75,7 +73,7 @@ export default function DepositScreen() {
       Toast.show({
         type: 'error',
         text1: 'Saldo insuficiente',
-        text2: `Broka ass`,
+        text2: `Debes tener un saldo disponible de al menos ${formatAmount(totalAmount.toString())}`,
         position: 'bottom',
         visibilityTime: 3000,
       });
@@ -84,7 +82,7 @@ export default function DepositScreen() {
 
     router.push({
       pathname: '/deposit/select-recipient',
-      params: { 
+      params: {
         amount: numericAmount.toString(),
         commission: COMMISSION_AMOUNT.toString()
       }
@@ -104,7 +102,7 @@ export default function DepositScreen() {
       <StatusBar style="dark" />
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
           >
@@ -139,7 +137,7 @@ export default function DepositScreen() {
             ))}
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
               styles.continueButton,
               amount === '0' && styles.continueButtonDisabled
@@ -151,7 +149,7 @@ export default function DepositScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
-      <Toast 
+      <Toast
         config={{
           error: (props) => (
             <View style={toastStyles.container}>
