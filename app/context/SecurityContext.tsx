@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, View, TouchableWithoutFeedback, Image } from 'react-native';
 import { router } from 'expo-router';
-import { supabase } from '@/app/src/db';
+import * as authService from '@/app/services/auth';
 import { colors } from '../constants/colors';
 
 interface SecurityContextType {
@@ -41,7 +41,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
     inactivityTimer.current = setTimeout(async () => {
       // Only logout if the app is actually inactive
       if (!isAppActive) {
-        await supabase.auth.signOut();
+        await authService.signOut();
         router.replace('/login');
       }
     }, INACTIVITY_TIMEOUT);

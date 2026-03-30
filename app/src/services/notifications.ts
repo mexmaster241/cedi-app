@@ -2,6 +2,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from '../db';
+import * as authService from '@/app/services/auth';
 
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
@@ -33,7 +34,6 @@ export async function registerForPushNotificationsAsync() {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
       return null;
     }
     
@@ -42,7 +42,6 @@ export async function registerForPushNotificationsAsync() {
       projectId: process.env.EXPO_PUBLIC_PROJECT_ID || "90a7579b-5a8d-4191-8bba-bc4f00537579",
     });
   } else {
-    console.log('Must use physical device for Push Notifications');
   }
 
   return token;
@@ -51,12 +50,12 @@ export async function registerForPushNotificationsAsync() {
 // Save the token to your user profile in Supabase
 export async function savePushToken(token: string) {
   try {
-    const user = await supabase.auth.getUser();
-    if (user.data?.user) {
+    const user = await authService.getUser();
+    if (user?.id) {
       const { error } = await supabase
         .from('user_push_tokens')
         .upsert({
-          user_id: user.data.user.id,
+          user_id: user.id,
           push_token: token,
           device_type: Platform.OS,
           updated_at: new Date(),
@@ -84,7 +83,6 @@ export function setupNotificationListeners(onNotification: (notification: Notifi
   const responseListener = Notifications.addNotificationResponseReceivedListener(
     response => {
       // Handle notification taps here
-      console.log('Notification response:', response);
     }
   );
 

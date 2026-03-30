@@ -1,9 +1,8 @@
-import { supabase } from '../src/db';
+import * as authService from '@/app/services/auth';
 
 const handleUnenrollMFA = async (factorId: string) => {
   try {
-    const { error } = await supabase.auth.mfa.unenroll({ factorId });
-    if (error) throw error;
+    await authService.unenrollMfaFactor(factorId);
     // ... existing code ...
   } catch (error) {
     // ... existing code ...

@@ -9,7 +9,7 @@ import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
 import Toast from 'react-native-toast-message';
 import React from 'react';
-import { supabase, supabaseAdmin } from '@/app/src/db';
+import * as authService from '@/app/services/auth';
 import { SpeiService } from '@/app/components/spei.service';
 import { createTransfer } from '@/app/constants/transfer';
 import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
@@ -237,33 +237,20 @@ export default function ConfirmDepositScreen() {
       let isMember = false;
 
       if (currentUser?.user_metadata?.team_id) {
-        userId = await db.teams.getIdOwner(currentUser?.user_metadata?.team_id);
-        isMember = await db.teams.hasRole(currentUser?.id, currentUser?.user_metadata?.team_id, 'MEMBER');
+        userId = await db.teams.getIdOwner(currentUser?.user_metadata?.team_id as string);
+        isMember = await db.teams.hasRole(currentUser?.id, currentUser?.user_metadata?.team_id as string, 'MEMBER');
       }
 
       if (!userId) throw new Error('No authenticated user');
 
       // First verify MFA
-      const { data: factorsData } = await supabase.auth.mfa.listFactors();
-      const factor = factorsData?.totp?.[0];
+      const factors = await authService.listMfaFactors();
+      const factor = factors[0];
 
       if (!factor) throw new Error('MFA no configurado');
 
-      // Challenge the factor
-      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
-        factorId: factor.id
-      });
-
-      if (challengeError) throw challengeError;
-
-      // Verify the challenge
-      const { error: verifyError } = await supabase.auth.mfa.verify({
-        factorId: factor.id,
-        challengeId: challengeData.id,
-        code: mfaCode
-      });
-
-      if (verifyError) throw verifyError;
+      const challengeData = await authService.challengeMfaFactor(factor.id);
+      await authService.verifyMfaFactor(factor.id, challengeData.id, mfaCode);
 
       // If MFA verification successful, proceed with transfer
       const finalInstitutionCode = getInstitutionCode(bankCode);

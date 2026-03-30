@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  SafeAreaView,
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   ScrollView,
   RefreshControl,
   Modal,
@@ -12,18 +11,21 @@ import {
   TextInput,
   Alert,
   Platform,
-  Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '@/app/constants/colors';
-import { db, supabase } from '@/app/src/db';
+import { db } from '@/app/src/db';
+import * as authService from '@/app/services/auth';
 import { Skeleton } from '@/app/components/Skeleton';
 import Toast from 'react-native-toast-message';
 import QRCodeSVG from 'react-native-qrcode-svg';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/app/context/AuthContext';
+import { useTheme } from '@/app/context/ThemeContext';
+import Constants from 'expo-constants';
+import { colors } from '@/app/constants/colors';
 
 // OTP Input Component
 const OTPInput = ({ 
@@ -119,32 +121,28 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
   const startSetup = async () => {
     setIsLoading(true);
     try {
-      // Clean up any existing factors
-      const { data: existingFactors } = await supabase.auth.mfa.listFactors();
-      for (const factor of (existingFactors?.totp || [])) {
+      // Clean up any existing unverified factors
+      const existingFactors = await authService.listMfaFactors();
+      for (const factor of existingFactors) {
         if (factor.status === 'unverified') {
-          await supabase.auth.mfa.unenroll({
-            factorId: factor.id
-          });
+          await authService.unenrollMfaFactor(factor.id);
         }
       }
 
       // Enroll new factor
       const timestamp = new Date().getTime();
-      const { data, error } = await supabase.auth.mfa.enroll({
-        factorType: 'totp',
-        issuer: 'cedi',
-        friendlyName: `cedi-${userEmail}-${timestamp}`
-      });
+      const data = await authService.enrollMfaFactor(
+        'totp',
+        'cedi',
+        `cedi-${userEmail}-${timestamp}`
+      );
 
-      if (error) throw error;
-
-      setSecret(data.totp.secret);
+      setSecret(data.factor?.totp?.secret ?? '');
       setFactorId(data.id);
       setStep('scan');
     } catch (error: any) {
       console.error('Error setting up MFA:', error);
-      Alert.alert('Error', 'No se pudo configurar la autenticación de dos factores');
+      Alert.alert('Error', 'No se pudo configurar la autenticaci?n de dos factores');
     } finally {
       setIsLoading(false);
     }
@@ -157,8 +155,8 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
       
       Toast.show({
         type: 'success',
-        text1: 'Código copiado',
-        text2: 'El código ha sido copiado al portapapeles',
+        text1: 'C?digo copiado',
+        text2: 'El c?digo ha sido copiado al portapapeles',
         position: 'bottom',
         visibilityTime: 2000,
       });
@@ -176,20 +174,10 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
     setIsLoading(true);
     try {
       // Create challenge
-      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
-        factorId: factorId
-      });
-
-      if (challengeError) throw challengeError;
+      const challengeData = await authService.challengeMfaFactor(factorId);
 
       // Verify challenge
-      const { error: verifyError } = await supabase.auth.mfa.verify({
-        factorId: factorId,
-        challengeId: challengeData.id,
-        code: verificationCode
-      });
-
-      if (verifyError) throw verifyError;
+      await authService.verifyMfaFactor(factorId, challengeData.id, verificationCode);
 
       // Update user MFA status
       await db.users.createOrUpdate({
@@ -201,7 +189,7 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
       Toast.show({
         type: 'success',
         text1: 'MFA Activado',
-        text2: 'La autenticación de dos factores ha sido activada correctamente',
+        text2: 'La autenticaci?n de dos factores ha sido activada correctamente',
         position: 'bottom',
         visibilityTime: 3000,
       });
@@ -210,7 +198,7 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
       onClose();
     } catch (error: any) {
       console.error('Error verifying MFA:', error);
-      Alert.alert('Error', 'Código incorrecto o ha ocurrido un error');
+      Alert.alert('Error', 'C?digo incorrecto o ha ocurrido un error');
     } finally {
       setIsLoading(false);
     }
@@ -226,7 +214,7 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
       <View style={modalStyles.overlay}>
         <View style={modalStyles.container}>
           <View style={modalStyles.header}>
-            <Text style={modalStyles.title}>Autenticación de dos factores</Text>
+            <Text style={modalStyles.title}>Autenticaci?n de dos factores</Text>
             <TouchableOpacity onPress={onClose} style={modalStyles.closeButton}>
               <Feather name="x" size={24} color={colors.black} />
             </TouchableOpacity>
@@ -235,8 +223,8 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
           {step === 'initial' && (
             <View style={modalStyles.content}>
               <Text style={modalStyles.description}>
-                La autenticación de dos factores agrega una capa adicional de seguridad a tu cuenta.
-                Necesitarás instalar una aplicación de autenticación como Google Authenticator o Microsoft Authenticator.
+                La autenticaci?n de dos factores agrega una capa adicional de seguridad a tu cuenta.
+                Necesitar?s instalar una aplicaci?n de autenticaci?n como Google Authenticator o Microsoft Authenticator.
               </Text>
               <TouchableOpacity 
                 style={modalStyles.button}
@@ -246,7 +234,7 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
                 {isLoading ? (
                   <ActivityIndicator color={colors.white} />
                 ) : (
-                  <Text style={modalStyles.buttonText}>Comenzar configuración</Text>
+                  <Text style={modalStyles.buttonText}>Comenzar configuraci?n</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -255,7 +243,7 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
           {step === 'scan' && (
             <View style={modalStyles.content}>
               <Text style={modalStyles.secretLabel}>
-                Ingresa este código en tu aplicación de autenticación:
+                Ingresa este c?digo en tu aplicaci?n de autenticaci?n:
               </Text>
               
               <View style={modalStyles.secretCodeBox}>
@@ -273,7 +261,7 @@ const MFASetup = ({ isVisible, onClose, onSuccess, userId, userEmail }: MFASetup
               </View>
               
               <Text style={modalStyles.instruction}>
-                Después de agregar, ingresa el código de 6 dígitos generado:
+                Despu?s de agregar, ingresa el c?digo de 6 d?gitos generado:
               </Text>
               <OTPInput 
                 value={verificationCode} 
@@ -320,33 +308,19 @@ const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId, userEmail }: 
     setIsLoading(true);
     try {
       // List factors to find the active one
-      const { data: factorsData } = await supabase.auth.mfa.listFactors();
-      const factor = factorsData?.totp?.[0];
+      const factors = await authService.listMfaFactors();
+      const factor = factors[0];
 
       if (!factor) throw new Error('No MFA factor found');
 
       // Challenge the factor
-      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
-        factorId: factor.id
-      });
-
-      if (challengeError) throw challengeError;
+      const challengeData = await authService.challengeMfaFactor(factor.id);
 
       // Verify the challenge with the code
-      const { error: verifyError } = await supabase.auth.mfa.verify({
-        factorId: factor.id,
-        challengeId: challengeData.id,
-        code: verificationCode
-      });
-
-      if (verifyError) throw verifyError;
+      await authService.verifyMfaFactor(factor.id, challengeData.id, verificationCode);
 
       // Unenroll the factor
-      const { error: unenrollError } = await supabase.auth.mfa.unenroll({
-        factorId: factor.id,
-      });
-
-      if (unenrollError) throw unenrollError;
+      await authService.unenrollMfaFactor(factor.id);
 
       // Update user MFA status
       if (userEmail) {
@@ -360,7 +334,7 @@ const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId, userEmail }: 
       Toast.show({
         type: 'success',
         text1: 'MFA Desactivado',
-        text2: 'La autenticación de dos factores ha sido desactivada',
+        text2: 'La autenticaci?n de dos factores ha sido desactivada',
         position: 'bottom',
         visibilityTime: 3000,
       });
@@ -369,7 +343,7 @@ const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId, userEmail }: 
       onClose();
     } catch (error: any) {
       console.error('Error disabling MFA:', error);
-      Alert.alert('Error', 'Código incorrecto o ha ocurrido un error');
+      Alert.alert('Error', 'C?digo incorrecto o ha ocurrido un error');
     } finally {
       setIsLoading(false);
     }
@@ -385,14 +359,14 @@ const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId, userEmail }: 
       <View style={modalStyles.overlay}>
         <View style={modalStyles.container}>
           <View style={modalStyles.header}>
-            <Text style={modalStyles.title}>Desactivar autenticación</Text>
+            <Text style={modalStyles.title}>Desactivar autenticaci?n</Text>
             <TouchableOpacity onPress={onClose} style={modalStyles.closeButton}>
               <Feather name="x" size={24} color={colors.black} />
             </TouchableOpacity>
           </View>
           <View style={modalStyles.content}>
             <Text style={modalStyles.description}>
-              Para desactivar la autenticación de dos factores, ingresa el código generado por tu aplicación de autenticación:
+              Para desactivar la autenticaci?n de dos factores, ingresa el c?digo generado por tu aplicaci?n de autenticaci?n:
             </Text>
             <OTPInput 
               value={verificationCode} 
@@ -420,211 +394,300 @@ const DisableMFADialog = ({ isVisible, onClose, onSuccess, userId, userEmail }: 
   );
 };
 
-interface UserProfile {
-  id: string;
-  full_name: string;
-  email: string;
-  company: string;
-  mfa_enabled: boolean;
-  team_name?: string;
-}
+const MENU_ITEMS: { key: string; label: string; icon: keyof typeof Feather.glyphMap; route?: string; status?: string }[] = [
+  { key: 'limits', label: 'Límite transaccional', icon: 'bar-chart-2' },
+  { key: 'password', label: 'Cambiar contraseña', icon: 'key' },
+  { key: 'fingerprint', label: 'Huella digital', icon: 'shield', status: 'Activo' },
+  { key: 'phone', label: 'Asociar / cambiar celular', icon: 'phone' },
+  { key: 'health', label: 'Salud financiera', icon: 'heart' },
+  { key: 'statement', label: 'Estado de cuenta', icon: 'file-text' },
+];
 
 export default function ProfileScreen() {
-  const { user, loading: authLoading } = useAuth();
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { colorScheme, theme, setMode } = useTheme();
+  const { user, loading: authLoading, refreshAuth } = useAuth();
+  const params = useLocalSearchParams<{ name?: string; email?: string }>();
+  const [mfaEnabled, setMfaEnabled] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showMFASetup, setShowMFASetup] = useState(false);
   const [showDisableMFA, setShowDisableMFA] = useState(false);
 
-  const loadUserProfile = useCallback(async () => {
-    if (authLoading || !user) {
-      setIsLoading(false);
-      setRefreshing(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await db.users.getOptional(user.id);
+        if (!cancelled) setMfaEnabled(data?.mfa_enabled ?? false);
+      } catch {
+        if (!cancelled) setMfaEnabled(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    if (user?.id) {
+      try {
+        const data = await db.users.getOptional(user.id);
+        setMfaEnabled(data?.mfa_enabled ?? false);
+      } catch {
+        setMfaEnabled(false);
+      }
+    }
+    setRefreshing(false);
+  }, [user?.id]);
+
+  const handleCopy = useCallback(async (value: string, label: string) => {
+    try {
+      await Clipboard.setStringAsync(value);
+      Toast.show({
+        type: 'success',
+        text1: 'Copiado',
+        text2: `${label} copiado al portapapeles`,
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No se pudo copiar',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+    }
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    // En web, Alert.alert es un no-op; cerramos sesión directamente.
+    if (Platform.OS === 'web') {
+      (async () => {
+        try {
+          await authService.signOut();
+          await refreshAuth();
+          router.replace('/intro');
+        } catch (e) {
+          console.error('Error logging out:', e);
+        }
+      })();
       return;
     }
-    
-    setIsLoading(true);
-    try {
-      const memberships = await db.teams.getTeamMemberships(user.id);
-      let targetUserId = user.id;
-      let teamName: string | undefined;
 
-      if (memberships && memberships.length > 0) {
-        const teamId = memberships[0].team_id;
-        // The data is an object, but TypeScript infers it as an array.
-        // We cast to `any` to bypass the type error while maintaining functionality.
-        const teamData: any = memberships[0].team;
-        teamName = teamData.name;
-        const ownerId = await db.teams.getIdOwner(teamId);
-        if (ownerId) {
-          targetUserId = ownerId;
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Estás seguro de que deseas cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar sesión',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await authService.signOut();
+              await refreshAuth();
+              router.replace('/intro');
+            } catch (e) {
+              console.error('Error logging out:', e);
+            }
+          },
+        },
+      ]
+    );
+  }, [refreshAuth]);
+
+  const handleMenuPress = useCallback(
+    (key: string) => {
+      if (key === 'password') {
+        if (mfaEnabled) {
+          setShowDisableMFA(true);
+        } else {
+          setShowMFASetup(true);
         }
+        return;
       }
-
-      const userData = await db.users.get(targetUserId);
-
-      if (userData) {
-        setUserProfile({
-          id: user.id, // Keep the logged-in user's ID for actions
-          full_name: `${userData.given_name || ''} ${userData.family_name || ''}`.trim() || 'Usuario',
-          email: userData.email,
-          company: userData.company_name || 'Empresa no especificada',
-          mfa_enabled: userData.mfa_enabled || false,
-          team_name: teamName,
-        });
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
-  }, [user, authLoading]);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadUserProfile();
-  }, [loadUserProfile]);
-
-  useEffect(() => {
-    loadUserProfile();
-  }, [loadUserProfile]);
-
-  const renderSkeletonContent = () => (
-    <>
-      <View style={styles.avatarContainer}>
-        <View style={[styles.avatar, { backgroundColor: colors.beige }]}>
-      
-        </View>
-      </View>
-
-      <View style={styles.infoContainer}>
-        <View style={styles.infoItem}>
-          <Skeleton width={100} height={14} />
-          <View style={{ height: 8 }} />
-          <Skeleton width={200} height={16} />
-        </View>
-
-        <View style={styles.infoItem}>
-          <Skeleton width={120} height={14} />
-          <View style={{ height: 8 }} />
-          <Skeleton width={180} height={16} />
-        </View>
-
-        <View style={styles.infoItem}>
-          <Skeleton width={80} height={14} />
-          <View style={{ height: 8 }} />
-          <Skeleton width={160} height={16} />
-        </View>
-      </View>
-    </>
+      // Otros ítems: navegar o "Próximamente"
+      Toast.show({
+        type: 'info',
+        text1: 'Próximamente',
+        text2: 'Esta función estará disponible pronto',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+    },
+    [mfaEnabled]
   );
 
-  const renderContent = () => (
-    <>
-      <View style={styles.avatarContainer}>
-        <View style={styles.avatar}>
-          <Feather name="user" size={64} color={colors.black} />
-        </View>
-      </View>
-
-      {userProfile && (
-        <>
-          <View style={styles.infoContainer}>
-            <View style={styles.infoItem}>
-              <Text style={styles.label}>Nombre completo</Text>
-              <Text style={styles.value}>{userProfile.full_name}</Text>
-            </View>
-
-            <View style={styles.infoItem}>
-              <Text style={styles.label}>Correo electrónico</Text>
-              <Text style={styles.value}>{userProfile.email}</Text>
-            </View>
-
-            <View style={styles.infoItem}>
-              <Text style={styles.label}>Empresa</Text>
-              <Text style={styles.value}>{userProfile.company}</Text>
-            </View>
-
-            {userProfile.team_name && (
-              <View style={styles.infoItem}>
-                <Text style={styles.label}>Equipo</Text>
-                <Text style={styles.value}>{userProfile.team_name}</Text>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.securityContainer}>
-            <Text style={styles.sectionTitle}>Seguridad</Text>
-            
-            <View style={styles.securityItem}>
-              <View style={styles.securityInfo}>
-                <Text style={styles.securityLabel}>Autenticación de dos factores</Text>
-                <View style={[
-                  styles.badge, 
-                  userProfile.mfa_enabled ? styles.badgeEnabled : styles.badgeDisabled
-                ]}>
-                  <Text style={[
-                    styles.badgeText,
-                    userProfile.mfa_enabled ? styles.badgeTextEnabled : styles.badgeTextDisabled
-                  ]}>
-                    {userProfile.mfa_enabled ? "Activado" : "Desactivado"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </>
-      )}
-    </>
-  );
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const paramName = typeof params.name === 'string' ? params.name : undefined;
+  const paramEmail = typeof params.email === 'string' ? params.email : undefined;
+  const displayName = paramName ?? 'Usuario';
+  const displayEmail = paramEmail ?? '';
+  const handleToggleTheme = useCallback(() => {
+    setMode(colorScheme === 'dark' ? 'light' : 'dark');
+  }, [colorScheme, setMode]);
 
   return (
     <>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => router.back()}
-            style={styles.backButton}
-          >
-            <Feather name="arrow-left" size={24} color={colors.black} />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+        <View style={[styles.header, { borderBottomColor: theme.border }]}>
+          <TouchableOpacity onPress={() => router.push('/')} style={styles.backButton} hitSlop={12}>
+            <Feather name="arrow-left" size={24} color={theme.icon} />
           </TouchableOpacity>
-          <Text style={styles.title}>Perfil</Text>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.title, { color: theme.text }]}>Perfil</Text>
+          </View>
+          <TouchableOpacity
+            onPress={handleToggleTheme}
+            style={styles.themeToggleButton}
+            hitSlop={12}
+          >
+            <Feather
+              name={colorScheme === 'dark' ? 'sun' : 'moon'}
+              size={20}
+              color={theme.icon}
+            />
+          </TouchableOpacity>
         </View>
 
-        <ScrollView 
-          style={styles.content}
+        <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={colors.black}
-              colors={[colors.black]}
-              progressBackgroundColor={colors.beige}
+              tintColor={theme.text}
             />
           }
+          showsVerticalScrollIndicator={false}
         >
-          {isLoading ? renderSkeletonContent() : renderContent()}
+          {/* Profile header: avatar + badge + Usuario */}
+          <View style={[styles.profileBlock, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border }]}>
+            <View style={styles.avatarRow}>
+              <View style={[styles.avatarWrap, { borderColor: theme.border }]}>
+                {authLoading ? (
+                  <Skeleton width={88} height={88} />
+                ) : (
+                  <View style={[styles.avatar, { backgroundColor: theme.surface }]}>
+                    <Feather name="user" size={44} color={theme.iconMuted} />
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[styles.editAvatarBtn, { backgroundColor: theme.blue }]}
+                  onPress={() => Toast.show({ type: 'info', text1: 'Próximamente', position: 'bottom', visibilityTime: 2000 })}
+                >
+                  <Feather name="edit-2" size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.profileLabels}>
+                <View style={styles.fieldBlock}>
+                  <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Usuario:</Text>
+                  <View style={styles.valueCopyRow}>
+                    <Text style={[styles.fieldValue, { color: theme.text }]} numberOfLines={1}>
+                      {authLoading ? '—' : displayName}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => handleCopy(displayName, 'Usuario')}
+                      hitSlop={10}
+                      style={styles.copyBtn}
+                    >
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={styles.fieldBlock}>
+                  <Text style={[styles.fieldLabel, { color: theme.textMuted }]}>Correo:</Text>
+                  <View style={styles.valueCopyRow}>
+                    <Text style={[styles.fieldValue, { color: theme.text }]} numberOfLines={1}>
+                      {authLoading ? '—' : displayEmail}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => handleCopy(displayEmail, 'Correo')}
+                      hitSlop={10}
+                      style={styles.copyBtn}
+                    >
+                      <Feather name="copy" size={18} color={theme.iconMuted} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View style={[styles.validadaRow, { borderTopColor: theme.border }]}>
+              <Feather name="check-circle" size={18} color={theme.success} />
+              <Text style={[styles.validadaText, { color: theme.success }]}>Validada</Text>
+            </View>
+          </View>
+
+          {/* Menu list */}
+          <View style={styles.menuSection}>
+            {MENU_ITEMS.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.menuItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                onPress={() => handleMenuPress(item.key)}
+                activeOpacity={0.7}
+              >
+                <Feather name={item.icon} size={22} color={theme.icon} />
+                <Text style={[styles.menuLabel, { color: theme.text }]}>{item.label}</Text>
+                {item.status ? (
+                  <Text style={[styles.menuStatus, { color: theme.textMuted }]}>{item.status}</Text>
+                ) : null}
+                <Feather name="chevron-right" size={20} color={theme.iconMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Logout */}
+          <View style={styles.logoutSection}>
+            <TouchableOpacity
+              style={[styles.menuItem, styles.logoutItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              onPress={handleLogout}
+              activeOpacity={0.7}
+            >
+              <Feather name="log-out" size={22} color={theme.error} />
+              <Text style={[styles.logoutLabel, { color: theme.error }]}>Cerrar sesión</Text>
+              <Feather name="chevron-right" size={20} color={theme.iconMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.version, { color: theme.textMuted }]}>V. {appVersion}</Text>
         </ScrollView>
 
-        {userProfile && (
+        {user && (
           <>
-            <MFASetup 
-              isVisible={showMFASetup} 
-              onClose={() => setShowMFASetup(false)} 
-              onSuccess={loadUserProfile}
-              userId={userProfile.id}
-              userEmail={userProfile.email}
+            <MFASetup
+              isVisible={showMFASetup}
+              onClose={() => setShowMFASetup(false)}
+              onSuccess={async () => {
+                if (user?.id) {
+                  try {
+                    const data = await db.users.getOptional(user.id);
+                    setMfaEnabled(data?.mfa_enabled ?? false);
+                  } catch {
+                    setMfaEnabled(false);
+                  }
+                }
+              }}
+              userId={user.id}
+              userEmail={paramEmail ?? user.email ?? ''}
             />
-            <DisableMFADialog 
-              isVisible={showDisableMFA} 
-              onClose={() => setShowDisableMFA(false)} 
-              onSuccess={loadUserProfile}
-              userId={userProfile.id}
-              userEmail={userProfile.email}
+            <DisableMFADialog
+              isVisible={showDisableMFA}
+              onClose={() => setShowDisableMFA(false)}
+              onSuccess={async () => {
+                if (user?.id) {
+                  try {
+                    const data = await db.users.getOptional(user.id);
+                    setMfaEnabled(data?.mfa_enabled ?? false);
+                  } catch {
+                    setMfaEnabled(false);
+                  }
+                }
+              }}
+              userId={user.id}
+              userEmail={paramEmail ?? user.email ?? ''}
             />
           </>
         )}
@@ -634,157 +697,160 @@ export default function ProfileScreen() {
   );
 }
 
+const ROUNDED = 16;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: colors.beige,
   },
   backButton: {
     padding: 8,
+    marginRight: 8,
+  },
+  themeToggleButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  headerCenter: {
+    flex: 1,
   },
   title: {
     fontFamily: 'ClashDisplay',
     fontSize: 20,
-    color: colors.black,
-    marginLeft: 16,
   },
-  content: {
+  subtitle: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
   },
-  avatarContainer: {
+  profileBlock: {
+    borderRadius: ROUNDED,
+    borderWidth: 1,
+    padding: 24,
+    marginBottom: 32,
+  },
+  avatarRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 32,
+  },
+  avatarWrap: {
+    position: 'relative',
+    borderWidth: 2,
+    borderRadius: 999,
+    padding: 4,
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.beige,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  infoContainer: {
-    backgroundColor: colors.white,
+  editAvatarBtn: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 32,
+    height: 32,
     borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  infoItem: {
-    marginBottom: 20,
+  profileLabels: {
+    flex: 1,
+    marginLeft: 20,
+    minWidth: 0,
   },
-  label: {
+  fieldBlock: {
+    marginBottom: 14,
+  },
+  fieldLabel: {
     fontFamily: 'ClashDisplay',
-    fontSize: 14,
-    color: colors.darkGray,
+    fontSize: 13,
     marginBottom: 4,
   },
-  value: {
+  valueCopyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+  },
+  fieldValue: {
     fontFamily: 'ClashDisplay',
     fontSize: 16,
-    color: colors.black,
-  },
-  securityContainer: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sectionTitle: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 18,
-    color: colors.black,
-    marginBottom: 16,
-  },
-  securityItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  securityInfo: {
     flex: 1,
+  },
+  copyBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  validadaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  securityLabel: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 14,
-    color: colors.black,
-    marginBottom: 4,
-  },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'transparent',
   },
-  badgeEnabled: {
-    backgroundColor: '#E7F5E8', // light green background
-  },
-  badgeDisabled: {
-    backgroundColor: '#FFEFEF', // light red background
-  },
-  badgeText: {
+  validadaText: {
     fontFamily: 'ClashDisplay',
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 15,
+    marginLeft: 6,
   },
-  badgeTextEnabled: {
-    color: '#2D7738', // dark green text
+  menuSection: {
+    marginBottom: 4,
   },
-  badgeTextDisabled: {
-    color: '#D64545', // dark red text
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: ROUNDED,
+    borderWidth: 1,
+    marginBottom: 10,
   },
-  button: {
-    backgroundColor: colors.black,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+  menuLabel: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    flex: 1,
+    marginLeft: 14,
   },
-  buttonDanger: {
-    backgroundColor: colors.red,
-  },
-  buttonText: {
+  menuStatus: {
     fontFamily: 'ClashDisplay',
     fontSize: 14,
-    color: colors.white,
+    marginRight: 8,
+  },
+  logoutSection: {
+    marginTop: 28,
+    marginBottom: 24,
+  },
+  logoutItem: {},
+  logoutLabel: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 16,
+    flex: 1,
+    marginLeft: 14,
+  },
+  version: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 13,
+    textAlign: 'center',
   },
 });
 

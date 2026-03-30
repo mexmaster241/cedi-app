@@ -1,28 +1,37 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Dimensions, useColorScheme } from 'react-native';
+import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { colors } from '../constants/colors';
-import { supabase } from '@/app/src/db';
+import { light, dark } from '@/app/constants/theme';
+import { primaryButtonStyle, primaryButtonTextStyle } from '@/app/constants/buttons';
+import * as authService from '@/app/services/auth';
+import { useAuth } from '@/app/context/AuthContext';
+
+const INPUT_PADDING = 20;
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { Feather } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as SecureStore from 'expo-secure-store';
+import * as safeStorage from '@/app/services/auth/safe-storage';
  
 
 export default function LoginScreen() {
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? dark : light;
+  const { refreshAuth } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
- 
-
-  
 
   const handleLogin = async () => {
     try {
@@ -41,20 +50,18 @@ export default function LoginScreen() {
       }
 
       const trimmedEmail = email.trim().toLowerCase();
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password
-      });
-      
-      if (error) throw error;
-      
+
+      const result = await authService.signIn(trimmedEmail, password);
+      if (result.error) throw new Error(result.error.message);
+
+      const { session } = result.data!;
+      await refreshAuth();
+
       // After successful login, offer to enable biometric quick login
-      if (data.user && data.session) {
+      if (session?.user && session?.refresh_token) {
         const compatible = await LocalAuthentication.hasHardwareAsync();
         const enrolled = compatible ? await LocalAuthentication.isEnrolledAsync() : false;
-        if (compatible && enrolled && data.session.refresh_token) {
-          console.log('[Biometric] Prompting user to enable biometrics');
+        if (compatible && enrolled && session?.refresh_token) {
           Alert.alert(
             'Usar biometría',
             '¿Quieres usar Face ID/biometría para ingresar la próxima vez?',
@@ -64,13 +71,12 @@ export default function LoginScreen() {
                 text: 'Sí', 
                 onPress: async () => {
                   try {
-                    console.log('[Biometric] Storing refresh token');
-                    await SecureStore.setItemAsync('biometricEnabled', 'true');
-                    await SecureStore.setItemAsync('supabaseRefreshToken', data.session.refresh_token);
+                    await safeStorage.setItem('biometricEnabled', 'true');
+                    if (session.refresh_token) {
+                      await safeStorage.setItem('supabaseRefreshToken', session.refresh_token);
+                    }
                     setBiometricEnabled(true);
-                    console.log('[Biometric] Stored. Enabled = true');
                   } catch (e) {
-                    console.log('[Biometric] Error storing tokens', e);
                   }
                 }
               }
@@ -114,23 +120,19 @@ export default function LoginScreen() {
     try {
       const compatible = await LocalAuthentication.hasHardwareAsync();
       const enrolled = compatible ? await LocalAuthentication.isEnrolledAsync() : false;
-      console.log('[Biometric] compatible:', compatible, 'enrolled:', enrolled, 'enabled state:', biometricEnabled);
       if (!compatible || !enrolled) return;
 
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Autentícate para ingresar',
         fallbackLabel: 'Ingresar con contraseña',
       });
-      console.log('[Biometric] auth result:', result.success);
       if (!result.success) return;
 
-      const refreshToken = await SecureStore.getItemAsync('supabaseRefreshToken');
-      console.log('[Biometric] has refresh token:', !!refreshToken);
+      const refreshToken = await safeStorage.getItem('supabaseRefreshToken');
       if (!refreshToken) return;
 
-      const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-      console.log('[Biometric] setSession result error?', !!error, 'session?', !!data?.session);
-      if (error) {
+      const refreshResult = await authService.refreshSession(refreshToken);
+      if (refreshResult.error) {
         Toast.show({
           type: 'error',
           text1: 'Error',
@@ -138,8 +140,9 @@ export default function LoginScreen() {
           position: 'bottom',
           visibilityTime: 3000,
         });
+      } else {
+        await refreshAuth();
       }
-      // On success, _layout will redirect
     } catch {
       // Silent fail to keep login available
     }
@@ -151,11 +154,9 @@ export default function LoginScreen() {
         const compatible = await LocalAuthentication.hasHardwareAsync();
         const enrolled = compatible ? await LocalAuthentication.isEnrolledAsync() : false;
         setIsBiometricSupported(compatible && enrolled);
-        const enabled = await SecureStore.getItemAsync('biometricEnabled');
+        const enabled = await safeStorage.getItem('biometricEnabled');
         setBiometricEnabled(enabled === 'true');
         if (enabled === 'true' && compatible && enrolled) {
-          // Auto-prompt biometrics if enabled
-          console.log('[Biometric] Auto-prompting');
           handleBiometricAuth();
         }
       } catch {}
@@ -163,11 +164,31 @@ export default function LoginScreen() {
   }, []);
 
   return (
-    <LinearGradient
-      colors={['rgba(249,246,244,1)', 'rgba(249,246,244,1)', 'rgba(232,217,202,1)']}
-      style={styles.container}
-    >
+    <View style={styles.container}>
+      <View style={styles.background} pointerEvents="none">
+        <Svg width={screenWidth} height={screenHeight} style={styles.backgroundSvg}>
+          <Defs>
+            <RadialGradient
+              id="bgGradient"
+              cx="50%"
+              cy="10%"
+              r="125%"
+              fx="50%"
+              fy="10%"
+            >
+              <Stop offset="40%" stopColor="#ffffff" stopOpacity="1" />
+              <Stop offset="100%" stopColor="#7bbcff" stopOpacity="1" />
+            </RadialGradient>
+          </Defs>
+          <Rect x={0} y={0} width={screenWidth} height={screenHeight} fill="url(#bgGradient)" />
+        </Svg>
+      </View>
       <View style={styles.formContainer}>
+        <Image
+          source={require('../../assets/images/cedi-logo-12.webp')}
+          style={styles.logo}
+          contentFit="contain"
+        />
         <Text style={styles.title}>Empieza tu camino</Text>
         {isBiometricSupported && (
           <TouchableOpacity 
@@ -184,41 +205,49 @@ export default function LoginScreen() {
           </TouchableOpacity>
         )}
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="tu@email.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused]}>
+            <Ionicons name="mail-outline" size={20} color={colors.darkGray} style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, styles.inputWithIcon]}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Dirección de correo"
+              placeholderTextColor={colors.darkGray}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              onFocus={() => setEmailFocused(true)}
+              onBlur={() => setEmailFocused(false)}
+            />
+          </View>
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Contraseña</Text>
-          <View style={styles.passwordContainer}>
+          <View style={[styles.inputWrapper, passwordFocused && styles.inputWrapperFocused]}>
+            <Ionicons name="lock-closed-outline" size={20} color={colors.darkGray} style={styles.inputIcon} />
             <TextInput
-              style={[styles.input, styles.passwordInput]}
+              style={[styles.input, styles.inputField]}
               value={password}
               onChangeText={setPassword}
-              placeholder="********"
+              placeholder="Contraseña"
+              placeholderTextColor={colors.darkGray}
               secureTextEntry={!showPassword}
+              onFocus={() => setPasswordFocused(true)}
+              onBlur={() => setPasswordFocused(false)}
             />
-            <TouchableOpacity 
-              style={styles.eyeIcon}
+            <TouchableOpacity
+              style={styles.eyeIconButton}
               onPress={() => setShowPassword(!showPassword)}
+              activeOpacity={0.6}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <Ionicons 
-                name={showPassword ? 'eye-off' : 'eye'} 
-                size={24} 
-                color="black" 
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={22}
+                color={colors.darkGray}
               />
             </TouchableOpacity>
           </View>
         </View>
-
-        
 
         <View style={styles.signupContainer}>
           <Text style={styles.signupText}>¿No tienes cuenta? </Text>
@@ -229,15 +258,18 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity 
-          style={[styles.button, isSubmitting && { opacity: 0.7 }]}
+        <TouchableOpacity
+          style={[primaryButtonStyle(theme), isSubmitting && { opacity: 0.7 }]}
           onPress={handleLogin}
           disabled={isSubmitting}
         >
           {isSubmitting ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.buttonText}>Ingresa</Text>
+            <>
+              <Text style={primaryButtonTextStyle(theme)}>Ingresa</Text>
+              <Ionicons name="arrow-forward-outline" size={20} color={theme.primaryContrast} />
+            </>
           )}
         </TouchableOpacity>
       </View>
@@ -257,7 +289,7 @@ export default function LoginScreen() {
           )
         }}
       />
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -267,63 +299,74 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 60,
   },
+  background: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: -10,
+  },
+  backgroundSvg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
   formContainer: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 0,
     width: '100%',
-    paddingHorizontal: 20,
+    paddingHorizontal: INPUT_PADDING,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 22,
   },
   title: {
-    fontSize: 32,
-    fontFamily: 'ClashDisplay',
+    fontSize: 28,
+    fontFamily: 'FunnelDisplay-400',
     color: colors.black,
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 70,
   },
   inputContainer: {
     width: '100%',
+    alignSelf: 'stretch',
     marginBottom: 20,
   },
-  label: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 16,
-    color: colors.black,
-    marginBottom: 8,
-  },
-  input: {
+  inputWrapper: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderRadius: 12,
-    fontSize: 16,
-    fontFamily: 'ClashDisplay',
-    color: colors.black,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.1)',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    position: 'relative',
+  },
+  inputWrapperFocused: {
+    borderColor: '#C0C0C0',
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    fontFamily: 'ClashDisplay',
+    color: colors.black,
+    textAlignVertical: 'center',
   },
   buttonContainer: {
     width: '100%',
-    paddingHorizontal: 20,
+    paddingHorizontal: INPUT_PADDING,
     marginBottom: 20,
-  },
-  button: {
-    backgroundColor: colors.black,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontFamily: 'ClashDisplay',
   },
   signupContainer: {
     flexDirection: 'row',
@@ -341,18 +384,24 @@ const styles = StyleSheet.create({
     color: colors.black,
     textDecorationLine: 'underline',
   },
-  passwordContainer: {
-    position: 'relative',
-    width: '100%',
+  inputIcon: {
+    marginLeft: 16,
   },
-  passwordInput: {
-    paddingRight: 50,
+  inputWithIcon: {
+    paddingLeft: 12,
+    paddingRight: 16,
   },
-  eyeIcon: {
+  inputField: {
+    paddingLeft: 12,
+    paddingRight: 48,
+  },
+  eyeIconButton: {
     position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -12 }],
+    right: 0,
+    height: '100%',
+    width: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   biometricButton: {
     alignItems: 'center',

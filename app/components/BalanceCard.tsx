@@ -1,31 +1,40 @@
-import { colors } from '@/app/constants/colors';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useState, useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { db } from '@/app/src/db';
+import { getBalance } from '@/app/services/core';
 import { Skeleton } from './Skeleton';
-import React from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface BalanceCardProps {
   balance?: number;
   teamId?: string | null;
 }
 
+const HIDDEN_LABEL = '• • • • • • •';
+
 export function BalanceCard({ balance: balanceProp, teamId }: BalanceCardProps) {
+  const { theme } = useTheme();
   const { user, loading: authLoading } = useAuth();
-  const [userData, setUserData] = useState<any>(null);
+  const [userBalance, setUserBalance] = useState<number | null>(null);
   const [teamBalance, setTeamBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
-    async function fetchUserData() {
-      if (user) {
-        const data = await db.users.get(user.id);
-        setUserData(data);
+    async function fetchUserBalance() {
+      if (user?.id) {
+        try {
+          const bal = await getBalance(user.id);
+          setUserBalance(bal ?? 0);
+        } catch {
+          setUserBalance(0);
+        }
       }
     }
-    fetchUserData();
-  }, [user]);
+    fetchUserBalance();
+  }, [user?.id]);
 
   useEffect(() => {
     async function fetchTeamBalance() {
@@ -33,45 +42,60 @@ export function BalanceCard({ balance: balanceProp, teamId }: BalanceCardProps) 
         setTeamBalance(null);
         return;
       }
-
       try {
         setLoading(true);
         const teamOwnerId = await db.teams.getIdOwner(teamId);
         if (!teamOwnerId) {
           setTeamBalance(0);
           return;
-        };
-
-        const ownerData = await db.users.get(teamOwnerId);
-        setTeamBalance(ownerData?.balance || 0);
-      } catch (error) {
-        console.error('Error fetching team balance:', error);
+        }
+        const bal = await getBalance(teamOwnerId);
+        setTeamBalance(bal ?? 0);
+      } catch {
         setTeamBalance(0);
       } finally {
         setLoading(false);
       }
     }
-
     fetchTeamBalance();
   }, [teamId]);
 
-  const isLoading = authLoading || loading;
-  const displayBalance = balanceProp ?? teamBalance ?? userData?.balance ?? 0;
+  const hasBalanceValue =
+    typeof balanceProp === 'number' ||
+    typeof teamBalance === 'number' ||
+    typeof userBalance === 'number';
 
+  const isLoading = authLoading || loading || !hasBalanceValue;
+  const displayBalance = balanceProp ?? teamBalance ?? userBalance ?? 0;
   const formattedBalance = new Intl.NumberFormat('es-MX', {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   }).format(displayBalance);
 
   return (
-    <View style={styles.card}>
-      <Text style={[styles.label, { textAlign: 'center' }]}>Balance disponible</Text>
+    <View style={[styles.card, { backgroundColor: theme.backgroundSecondary, borderColor: theme.border, marginTop: 15 }]}>
+      <View style={styles.row}>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>Balance disponible</Text>
+        <TouchableOpacity
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          onPress={() => setHidden((h) => !h)}
+          style={styles.eyeButton}
+        >
+          <Ionicons
+            name={hidden ? 'eye-off-outline' : 'eye-outline'}
+            size={22}
+            color={theme.textMuted}
+          />
+        </TouchableOpacity>
+      </View>
       {isLoading ? (
-        <View style={{ alignItems: 'center' }}>
-          <Skeleton width={200} height={38} />
+        <View style={styles.amountRow}>
+          <Skeleton width={160} height={40} />
         </View>
       ) : (
-        <Text style={[styles.balance, { textAlign: 'center' }]}>${formattedBalance}</Text>
+        <Text style={[styles.balance, { color: theme.text }]} numberOfLines={1}>
+          {hidden ? HIDDEN_LABEL : `$${formattedBalance}`}
+        </Text>
       )}
     </View>
   );
@@ -79,30 +103,33 @@ export function BalanceCard({ balance: balanceProp, teamId }: BalanceCardProps) 
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
-    padding: 20,
-    borderRadius: 16,
-    width: '90%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    borderWidth: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
   label: {
     fontFamily: 'ClashDisplay',
-    fontSize: 16,
-    color: colors.darkGray,
-    marginBottom: 8,
-    textAlign: 'center',
+    fontSize: 15,
+  },
+  eyeButton: {
+    padding: 4,
+  },
+  amountRow: {
+    alignItems: 'flex-start',
   },
   balance: {
     fontFamily: 'ClashDisplay',
-    fontSize: 32,
-    color: colors.black,
-    textAlign: 'center',
+    fontSize: 36,
+    letterSpacing: -0.5,
   },
 });

@@ -1,24 +1,24 @@
-import { Text, View, FlatList, StyleSheet, RefreshControl, TouchableOpacity } from "react-native";
+import { Text, View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useFonts } from 'expo-font';
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
-import { useCallback, useEffect, useState } from 'react';
-import { router } from 'expo-router';
-import { colors } from './constants/colors';
 import { BalanceCard } from './components/BalanceCard';
 import { ActionBar } from './components/ActionBar';
-import { Header } from './components/Header';
 import { TopBar } from './components/TopBar';
-import { getCurrentUser, db } from './src/db';
+import { QuickActions } from './components/QuickActions';
+import { TransactionList } from './components/TransactionList';
+import { db } from './src/db';
 import { Skeleton } from './components/Skeleton';
-import { Feather } from '@expo/vector-icons';
-import { useAuth } from "./context/AuthContext";
+import { useAuth } from './context/AuthContext';
+import { useTheme } from './context/ThemeContext';
 
-interface Movement {
+SplashScreen.preventAutoHideAsync();
+
+export interface Movement {
   id: string;
-  category: string;      
-  direction: string;     
-  status: string;        
+  category: string;
+  direction: string;
+  status: string;
   final_amount: number;
   counterparty_name: string;
   concept?: string;
@@ -26,17 +26,15 @@ interface Movement {
   clave_rastreo: string;
 }
 
-// Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync();
-
 export default function Index() {
+  const { theme } = useTheme();
   const { user } = useAuth();
   const [teamId, setTeamId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fontsLoaded] = useFonts({
-    'ClashDisplay': require('../assets/fonts/ClashDisplay-Regular.otf'),
+    ClashDisplay: require('../assets/fonts/ClashDisplay-Regular.otf'),
   });
 
   useEffect(() => {
@@ -46,8 +44,7 @@ export default function Index() {
         if (memberships && memberships.length > 0) {
           setTeamId(memberships[0].team_id);
         } else {
-          // Handle case where user has no teams, fetch personal data
-          setTeamId(null); 
+          setTeamId(null);
         }
       }
     };
@@ -55,27 +52,18 @@ export default function Index() {
   }, [user]);
 
   const fetchMovements = useCallback(async () => {
-    // Only fetch if we have a user and we have determined the team status
-    if (!user || (teamId === undefined && !user)) {
-        return;
-    };
-    
+    if (!user) return;
     setIsLoading(true);
     try {
-      let userMovements;
-      if (teamId) {
-        userMovements = await db.movements.teamList(teamId);
-      } else {
-        userMovements = await db.movements.list(user.id);
-      }
-      
-      const sortedMovements = (userMovements || []).sort((a, b) => {
-        return new Date(b?.created_at ?? 0).getTime() - new Date(a?.created_at ?? 0).getTime();
-      });
-      
-      setMovements(sortedMovements.slice(0, 20));
+      const userMovements = teamId
+        ? await db.movements.teamList(teamId)
+        : await db.movements.list(user.id);
+      const sorted = (userMovements || []).sort(
+        (a, b) => new Date(b?.created_at ?? 0).getTime() - new Date(a?.created_at ?? 0).getTime()
+      );
+      setMovements(sorted.slice(0, 20));
     } catch (err) {
-      console.error("Error fetching movements", err);
+      console.error('Error fetching movements', err);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -87,9 +75,7 @@ export default function Index() {
   }, [fetchMovements]);
 
   const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) {
-      await SplashScreen.hideAsync();
-    }
+    if (fontsLoaded) await SplashScreen.hideAsync();
   }, [fontsLoaded]);
 
   const onRefresh = useCallback(async () => {
@@ -99,197 +85,90 @@ export default function Index() {
 
   if (!fontsLoaded) return null;
 
-  const renderMovement = ({ item }: { item: Movement }) => {
-    const date = new Date(item.created_at || '');
-    const formattedDate = date.toLocaleDateString('es-MX', { 
-      day: '2-digit',
-      month: 'short'
-    }).toUpperCase();
-
-    // Get status text in Spanish
-    const getStatusText = (status: string) => {
-      switch (status.toUpperCase()) {
-        case 'REVERSED':
-          return 'devuelta';
-        case 'COMPLETED':
-          return 'completada';
-        default:
-          return 'pendiente';
-      }
-    };
-
-    // Get status color and icon based on status
-    const getStatusColor = (status: string) => {
-      switch (status.toUpperCase()) {
-        case 'REVERSED':
-          return colors.darkGray;
-        case 'COMPLETED':
-          return item.direction === 'INBOUND' ? '#22c55e' : colors.black;
-        default:
-          return colors.darkGray;
-      }
-    };
-
-    const getStatusIcon = (status: string) => {
-      switch (status.toUpperCase()) {
-        case 'REVERSED':
-          return 'rotate-ccw';
-        case 'COMPLETED':
-          return item.direction === 'INBOUND' ? 'arrow-down-left' : 'arrow-up-right';
-        default:
-          return 'clock';
-      }
-    };
-
-    return (
-      <TouchableOpacity 
-        style={styles.transaction}
-        onPress={() => router.push({
-          pathname: "/(tabs)/transaction",
-          params: { movementId: item.clave_rastreo }
-        })}
-      >
-        <View style={styles.leftContent}>
-          <View style={styles.iconContainer}>
-            <Feather 
-              name={getStatusIcon(item.status)} 
-              size={24} 
-              color={getStatusColor(item.status)}
-            />
+  const renderSkeletons = () => (
+    <>
+      {Array(5)
+        .fill(0)
+        .map((_, i) => (
+          <View key={i} style={styles.skeletonRow}>
+            <View style={styles.skeletonLeft}>
+              <Skeleton width={44} height={44} />
+              <View>
+                <Skeleton width={180} height={16} />
+                <View style={{ marginTop: 6 }}>
+                  <Skeleton width={120} height={13} />
+                </View>
+              </View>
+            </View>
+            <Skeleton width={80} height={18} />
           </View>
-          <View style={styles.transactionInfo}>
-            <Text style={styles.transactionTitle} numberOfLines={1}>
-              {item.direction === 'INBOUND' ? 'Transferencia recibida' : 'Transferencia enviada'}
-            </Text>
-            <Text style={styles.date}>
-              {formattedDate} • {getStatusText(item.status)}
-            </Text>
-          </View>
-        </View>
-        <Text 
-          style={[
-            styles.amount, 
-            { color: getStatusColor(item.status) }
-          ]}
-          numberOfLines={1}
-        >
-          {item.direction === 'OUTBOUND' ? '-' : ''}${Math.abs(item.final_amount).toFixed(2)}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderSkeletons = () => {
-    return Array(5).fill(0).map((_, index) => (
-      <View key={index} style={styles.transaction}>
-        <View style={styles.leftContent}>
-          <View style={styles.iconContainer}>
-            <Skeleton width={24} height={24} />
-          </View>
-          <View style={styles.transactionInfo}>
-            <Skeleton width={200} height={16} />
-            <Skeleton width={150} height={14} />
-          </View>
-        </View>
-        <Skeleton width={80} height={16} />
-      </View>
-    ));
-  };
+        ))}
+    </>
+  );
 
   return (
     <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.beige,
-      }}
+      style={[styles.screen, { backgroundColor: theme.background }]}
       onLayout={onLayoutRootView}
     >
       <TopBar />
-      <FlatList
+      <ScrollView
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.black}
+            tintColor={theme.text}
           />
         }
-        ListHeaderComponent={
-          <View style={{ alignItems: 'center', width: '100%' }}>
-            <Header />
-            <BalanceCard teamId={teamId} />
-            <Text style={[styles.title, { alignSelf: 'center' }]}>Transacciones recientes</Text>
-          </View>
-        }
-        data={isLoading ? [] : movements}
-        renderItem={renderMovement}
-        ListEmptyComponent={isLoading ? renderSkeletons : null}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingBottom: 100,
-        }}
-      />
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <BalanceCard teamId={teamId} />
+          <QuickActions />
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            Transacciones recientes
+          </Text>
+        </View>
+        <TransactionList
+          items={movements}
+          isLoading={isLoading}
+          renderSkeleton={renderSkeletons}
+        />
+      </ScrollView>
       <ActionBar />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
+  screen: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: 100,
+  },
+  header: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  sectionTitle: {
     fontFamily: 'ClashDisplay',
-    fontSize: 20,
-    color: colors.black,
-    marginTop: 24,
-    marginBottom: 16,
+    fontSize: 18,
+    marginTop: 28,
+    marginBottom: 4,
     alignSelf: 'flex-start',
   },
-  transaction: {
+  skeletonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingRight: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.lightGray,
-    width: '100%',
+    paddingVertical: 14,
   },
-  leftContent: {
+  skeletonLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
+    gap: 12,
   },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.beige,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  transactionInfo: {
-    flex: 1,
-    marginRight: 8,
-  },
-  transactionTitle: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 16,
-    color: colors.black,
-  },
-  date: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 14,
-    color: colors.darkGray,
-    marginTop: 2,
-  },
-  amount: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 16,
-    textAlign: 'right',
-    minWidth: 90,
-    flexShrink: 0,
-  }
 });
-
-

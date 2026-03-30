@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '@/app/constants/colors';
 import { getCurrentUser } from '@/app/src/db';
 import { db } from '@/app/src/db';
+import { getBalance } from '@/app/services/core';
 import Toast from 'react-native-toast-message';
 import React from 'react';
 
@@ -23,23 +24,18 @@ export default function DepositScreen() {
         const currentUser = await getCurrentUser();
         let userId = currentUser?.id;
 
-        if (currentUser?.user_metadata?.team_id) {
-          userId = await db.teams.getIdOwner(currentUser?.user_metadata?.team_id);
+        const teamId = currentUser?.user_metadata?.team_id;
+        if (typeof teamId === 'string') {
+          userId = await db.teams.getIdOwner(teamId);
         }
 
         if (!userId) {
-          throw new Error('User ID not found');
-        }
-
-        // Then get full user data using ID
-        const user = await db.users.get(userId);
-        if (!user) {
-          console.error("User not found");
           setUserBalance(0);
           return;
         }
 
-        setUserBalance(user.balance ?? 0);
+        const bal = await getBalance(userId);
+        setUserBalance(bal ?? 0);
       } catch (err) {
         console.error("Error fetching balance:", err);
         setUserBalance(0);

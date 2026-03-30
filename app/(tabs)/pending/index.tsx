@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { colors } from '@/app/constants/colors';
 import { BANK_CODES, BANK_TO_INSTITUTION } from '@/app/constants/banks';
-import { db, supabase } from '@/app/src/db';
+import { db } from '@/app/src/db';
+import * as authService from '@/app/services/auth';
 import { useAuth } from '@/app/context/AuthContext';
 import { Feather } from '@expo/vector-icons';
 import { createTransfer } from '@/app/constants/transfer';
@@ -160,13 +161,11 @@ export default function PendingMovementsScreen() {
     if (mfaCode.length !== 6) { Toast.show({ type: 'error', text1: 'Código inválido', text2: 'Debe tener 6 dígitos' }); return; }
     try {
       setIsLoading(true);
-      const { data: factorsData } = await supabase.auth.mfa.listFactors();
-      const factor = factorsData?.totp?.[0];
+      const factors = await authService.listMfaFactors();
+      const factor = factors[0];
       if (!factor) throw new Error('MFA no configurado');
-      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: factor.id });
-      if (challengeError) throw challengeError;
-      const { error: verifyError } = await supabase.auth.mfa.verify({ factorId: factor.id, challengeId: challengeData.id, code: mfaCode });
-      if (verifyError) throw verifyError;
+      const challengeData = await authService.challengeMfaFactor(factor.id);
+      await authService.verifyMfaFactor(factor.id, challengeData.id, mfaCode);
 
       if (!selected.counterparty_clabe) throw new Error('CLABE del beneficiario no disponible');
       const formData = new FormData();

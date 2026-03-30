@@ -28,17 +28,17 @@ export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   }
 })
 
+import * as authService from '@/app/services/auth';
+
 export const getCurrentSession = async () => {
-  const { data: { session }, error } = await supabase.auth.getSession()
-  if (error) throw error
-  return session
-}
+  const result = await authService.getSession();
+  return result?.session ?? null;
+};
 
 export const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error) throw error
-  return user
-}
+  const user = await authService.getUser();
+  return user;
+};
 
 export interface Movement {
   id?: string
@@ -151,6 +151,18 @@ export const db = {
       return data
     },
 
+    /** Returns user or null when row doesn't exist (e.g. user not yet synced to Supabase). */
+    async getOptional(id: string) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (error) throw error
+      return data
+    },
+
     async getUserId(email: string) {
       const { data, error } = await supabase
         .from('users')
@@ -173,7 +185,6 @@ export const db = {
     },
 
     getByClabe: async (clabe: string) => {
-      console.log('Searching for CLABE:', clabe);
       const { data: accountData, error: accountError } = await supabase
         .from('transfer_accounts')
         .select('*')

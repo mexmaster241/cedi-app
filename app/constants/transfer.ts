@@ -2,7 +2,11 @@ import { SpeiService, SpeiTransferPayload } from '../components/spei.service'
 import { db, supabaseAdmin } from '../src/db'
 import { BANK_CODES, BANK_TO_INSTITUTION } from './banks'
 import { createContact } from './contacts'
+import { createTransferViaOrchestrator } from '../services/transaction-orchestrator'
+
 const COMMISSION_CLABE = '646180527800000009'
+
+const USE_ORCHESTRATOR = process.env.EXPO_PUBLIC_USE_TRANSACTION_ORCHESTRATOR === 'true'
 
 interface TransferResult {
   success: boolean
@@ -13,6 +17,45 @@ interface TransferResult {
 }
 
 export async function createTransfer(formData: FormData): Promise<TransferResult> {
+  if (USE_ORCHESTRATOR) {
+    try {
+      const userId = formData.get('userId') as string
+      if (!userId) throw new Error('User ID is required')
+      const amount = Number(formData.get('amount'))
+      const accountType = (formData.get('accountType') as 'clabe' | 'tarjeta') || 'clabe'
+      const recipientAccount = (formData.get(accountType) as string) || ''
+      const institutionCode = accountType === 'tarjeta' ? (formData.get('institucionContraparte') as string) : undefined
+      const saveAccountRaw = (formData.get('saveAccount') as string) || ''
+      const saveAccount = ['on', 'true', '1', 'yes'].includes(saveAccountRaw.toLowerCase?.() || saveAccountRaw)
+
+      const res = await createTransferViaOrchestrator({
+        userId,
+        amount,
+        accountType,
+        recipientAccount,
+        beneficiaryName: (formData.get('beneficiaryName') as string) || '',
+        concept: (formData.get('concept') as string) || '',
+        concept2: (formData.get('concept2') as string) || undefined,
+        rfcCurp: (formData.get('rfcCurp') as string) || undefined,
+        institutionCode,
+        saveAccount,
+        contactAlias: (formData.get('contactAlias') as string) || undefined,
+      })
+      return {
+        success: res.success,
+        newBalance: res.newBalance,
+        message: res.message,
+        error: res.error,
+        clave_rastreo: res.claveRastreo,
+      }
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Error en el orquestador de transferencias',
+      }
+    }
+  }
+
   try {
     const userId = formData.get('userId') as string
     if (!userId) throw new Error('User ID is required')

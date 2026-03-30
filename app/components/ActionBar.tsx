@@ -4,38 +4,36 @@ import { Ionicons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import Feather from '@expo/vector-icons/Feather';
 import { useRouter, usePathname } from 'expo-router';
-import { colors } from '../constants/colors';
 import { useState, useEffect } from 'react';
-import { getCurrentUser, db } from '../src/db';
 import Toast from 'react-native-toast-message';
-import BottomSheet from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { MfaVerifyModal } from './MfaVerifyModal';
+import * as authService from '@/app/services/auth';
 
 export function ActionBar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { theme } = useTheme();
   const [mfaEnabled, setMfaEnabled] = useState(false);
-  
-  // Bottom sheet reference
-  const bottomSheetRef = useRef<BottomSheet>(null);
-  
-  // Bottom sheet snap points
-  const snapPoints = useMemo(() => ['50%'], []);
+  const [showMfaModal, setShowMfaModal] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     async function checkMfaStatus() {
+      if (!user?.id) return;
       try {
-        const currentUser = await getCurrentUser();
-        if (!currentUser?.id) return;
-        
-        const userData = await db.users.get(currentUser.id);
-        setMfaEnabled(userData?.mfa_enabled ?? false);
+        const factors = await authService.listMfaFactors();
+        const hasActive = factors.some((f) => f.status === 'verified' || f.status === 'active');
+        setMfaEnabled(hasActive);
       } catch (err) {
-        console.error("Error checking MFA status:", err);
+        console.error('Error checking MFA status:', err);
+        setMfaEnabled(false);
       }
     }
     checkMfaStatus();
-  }, []);
+  }, [user?.id]);
 
   const handleHomePress = () => {
     if (pathname !== '/') {
@@ -54,156 +52,168 @@ export function ActionBar() {
         props: {
           style: {
             width: '90%',
-            backgroundColor: colors.white,
             borderRadius: 12,
             padding: 16,
             flexDirection: 'row',
             alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 0,
-              height: 2,
-            },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-            elevation: 3,
             marginBottom: 16,
           },
           text1Style: {
             fontFamily: 'ClashDisplay',
             fontSize: 16,
-            color: colors.black,
             marginBottom: 4,
           },
           text2Style: {
             fontFamily: 'ClashDisplay',
             fontSize: 14,
-            color: colors.darkGray,
           }
         }
       });
-      bottomSheetRef.current?.expand();
+      setTimeout(() => {
+        Linking.openURL('https://soycedi.com/login');
+      }, 3000);
       return;
     }
-    router.push('/deposit');
+    setShowMfaModal(true);
   };
 
   const handleCardPress = () => {
-    router.push('/card');
+    if (pathname !== '/(tabs)/card') {
+      router.push('/(tabs)/card');
+    }
   };
 
   const handlePendingPress = () => {
-    if (pathname !== '/(tabs)/pending') {
-      router.push('/(tabs)/pending');
+    if (!pathname.startsWith('/(tabs)/payment-services')) {
+      router.push('/(tabs)/payment-services');
     }
   };
 
   const handleDispersionsPress = () => {
-    if (pathname !== '/(tabs)/dispersions') {
+    if (!pathname.startsWith('/(tabs)/dispersions')) {
       router.push('/(tabs)/dispersions');
     }
   };
 
-  const handleEnableMfa = () => {
-    Linking.openURL('https://soycedi.com/dashboard');
-    bottomSheetRef.current?.close();
-  };
-
-  const isActive = (target: string) => pathname === target;
+  const isActive = (target: string) =>
+    pathname === target || pathname.startsWith(target + '/');
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <TouchableOpacity 
-          style={styles.tabButton} 
+      <View style={[styles.container, { backgroundColor: theme.backgroundSecondary, borderTopColor: theme.border }]}>
+        <TouchableOpacity
+          style={styles.tabButton}
           onPress={handleHomePress}
+          activeOpacity={0.7}
         >
-          <AntDesign 
-            name="home" 
-            size={24} 
-            color={isActive('/') ? colors.black : colors.lightGray} 
+          <AntDesign
+            name="home"
+            size={24}
+            color={isActive('/') ? theme.primary : theme.tabInactive}
           />
+          <Text style={[styles.tabLabel, { color: isActive('/') ? theme.primary : theme.tabInactive }]}>Inicio</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabButton} onPress={handlePendingPress}>
-          <Feather 
-            name="send" 
-            size={24} 
-            color={isActive('/(tabs)/pending') ? colors.black : colors.lightGray} 
+        <TouchableOpacity style={styles.tabButton} onPress={handlePendingPress} activeOpacity={0.7}>
+          <Feather
+            name="shopping-bag"
+            size={24}
+            color={isActive('/(tabs)/payment-services') ? theme.primary : theme.tabInactive}
           />
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: isActive('/(tabs)/payment-services') ? theme.primary : theme.tabInactive },
+            ]}
+          >
+            Pagos
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.centerButton} onPress={handleDepositPress}>
-          <View style={styles.plusButton}>
-            <Ionicons name="add" size={32} color={colors.white} />
+        <TouchableOpacity style={styles.centerButton} onPress={handleDepositPress} activeOpacity={0.85}>
+          <View style={[styles.plusButton, { backgroundColor: theme.primary, shadowColor: theme.shadowStrong }]}>
+            <Ionicons name="add" size={32} color={theme.primaryContrast} />
           </View>
+          <Text
+            style={[
+              styles.centerLabel,
+              { color: isActive('/deposit') ? theme.primary : theme.tabInactive },
+            ]}
+          >
+            Transferir
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabButton} onPress={handleDispersionsPress}>
-          <Feather 
-            name="users" 
-            size={24} 
-            color={isActive('/(tabs)/dispersions') ? colors.black : colors.lightGray} 
+        <TouchableOpacity style={styles.tabButton} onPress={handleDispersionsPress} activeOpacity={0.7}>
+          <Feather
+            name="file-text"
+            size={24}
+            color={isActive('/(tabs)/dispersions') ? theme.primary : theme.tabInactive}
           />
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: isActive('/(tabs)/dispersions') ? theme.primary : theme.tabInactive },
+            ]}
+          >
+            Cuenta
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.tabButton} onPress={handleCardPress}>
-          <Feather 
-            name="credit-card" 
-            size={24} 
-            color={colors.lightGray} 
+        <TouchableOpacity style={styles.tabButton} onPress={handleCardPress} activeOpacity={0.7}>
+          <Feather
+            name="credit-card"
+            size={24}
+            color={isActive('/card') ? theme.primary : theme.tabInactive}
           />
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: isActive('/card') ? theme.primary : theme.tabInactive },
+            ]}
+          >
+            Tarjeta
+          </Text>
         </TouchableOpacity>
       </View>
 
-      <BottomSheet
-        ref={bottomSheetRef}
-        index={-1}
-        snapPoints={snapPoints}
-        enablePanDownToClose={true}
-        backgroundStyle={styles.bottomSheetBackground}
-        handleIndicatorStyle={styles.bottomSheetIndicator}
-      >
-        <View style={styles.bottomSheetContent}>
-          <Text style={styles.bottomSheetTitle}>
-            Autenticación de dos factores requerida
-          </Text>
-          <Text style={styles.bottomSheetMessage}>
-            Para realizar transferencias, necesitas activar la autenticación de dos factores en tu cuenta. Por favor, actívala desde el dashboard web de CEDI.
-          </Text>
-          <TouchableOpacity 
-            style={styles.enableMfaButton}
-            onPress={handleEnableMfa}
-          >
-            <Text style={styles.enableMfaButtonText}>Ir al dashboard</Text>
-          </TouchableOpacity>
-        </View>
-      </BottomSheet>
+      <MfaVerifyModal
+        visible={showMfaModal}
+        onClose={() => setShowMfaModal(false)}
+        onSuccess={() => {
+          setShowMfaModal(false);
+          if (pathname !== '/(tabs)/deposit') {
+            router.push('/(tabs)/deposit');
+          }
+        }}
+        title="Confirmar transferencia"
+        successMessage="Ingresa el código de 6 dígitos de tu aplicación de autenticación para continuar con la transferencia."
+      />
 
-      <Toast 
+      <Toast
         config={{
           error: (props) => (
-            <View style={toastStyles.container}>
-              <View style={toastStyles.iconContainer}>
-                <Feather name="alert-circle" size={24} color={colors.black} />
+            <View style={[toastStyles.container, { backgroundColor: theme.backgroundSecondary }]}>
+              <View style={[toastStyles.iconContainer, { backgroundColor: theme.surface }]}>
+                <Feather name="alert-circle" size={24} color={theme.error} />
               </View>
               <View style={toastStyles.textContainer}>
-                <Text style={toastStyles.title}>{props.text1}</Text>
-                <Text style={toastStyles.message}>{props.text2}</Text>
+                <Text style={[toastStyles.title, { color: theme.text }]}>{props.text1}</Text>
+                <Text style={[toastStyles.message, { color: theme.textSecondary }]}>{props.text2}</Text>
               </View>
             </View>
           ),
           success: (props) => (
-            <View style={toastStyles.container}>
-              <View style={[toastStyles.iconContainer, { backgroundColor: colors.black }]}>
-                <Feather name="check" size={24} color={colors.white} />
+            <View style={[toastStyles.container, { backgroundColor: theme.backgroundSecondary }]}>
+              <View style={[toastStyles.iconContainer, { backgroundColor: theme.primary }]}>
+                <Feather name="check" size={24} color={theme.primaryContrast} />
               </View>
               <View style={toastStyles.textContainer}>
-                <Text style={toastStyles.title}>{props.text1}</Text>
-                <Text style={toastStyles.message}>{props.text2}</Text>
+                <Text style={[toastStyles.title, { color: theme.text }]}>{props.text1}</Text>
+                <Text style={[toastStyles.message, { color: theme.textSecondary }]}>{props.text2}</Text>
               </View>
             </View>
-          )
+          ),
         }}
       />
     </GestureHandlerRootView>
@@ -215,112 +225,76 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: colors.white,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     borderTopWidth: 1,
-    borderTopColor: colors.beige,
   },
   tabButton: {
-    padding: 8,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabLabel: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 11,
+    marginTop: 4,
   },
   centerButton: {
-    marginTop: -40, // Moves the button up to overlap the navbar
+    marginTop: -36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerLabel: {
+    fontFamily: 'ClashDisplay',
+    fontSize: 11,
+    marginTop: 4,
   },
   plusButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.black,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  bottomSheetBackground: {
-    backgroundColor: colors.white,
-  },
-  bottomSheetIndicator: {
-    backgroundColor: colors.lightGray,
-    width: 40,
-  },
-  bottomSheetContent: {
-    padding: 24,
-  },
-  bottomSheetTitle: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 20,
-    color: colors.black,
-    marginBottom: 12,
-  },
-  bottomSheetMessage: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 16,
-    color: colors.darkGray,
-    marginBottom: 24,
-  },
-  enableMfaButton: {
-    backgroundColor: colors.black,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  enableMfaButtonText: {
-    fontFamily: 'ClashDisplay',
-    fontSize: 16,
-    color: colors.white,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });
 
 const toastStyles = StyleSheet.create({
   container: {
     width: '90%',
-    backgroundColor: colors.white,
     borderRadius: 12,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    marginBottom: 16,
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    marginBottom: 16,
   },
   iconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.beige,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  textContainer: {
-    flex: 1,
-  },
+  textContainer: { flex: 1 },
   title: {
     fontFamily: 'ClashDisplay',
     fontSize: 16,
-    color: colors.black,
     marginBottom: 4,
   },
   message: {
     fontFamily: 'ClashDisplay',
     fontSize: 14,
-    color: colors.darkGray,
   },
 });
